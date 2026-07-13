@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kredi Kartı & Borç Yönetim Paneli</title>
+
+<!-- ============================================================ -->
+<!-- Tema flash önleyici: html render olmadan class uygulanır      -->
+<!-- ============================================================ -->
+<script>
+  (function () {
+    try {
+      var raw = localStorage.getItem('kkp_data');
+      var theme = null;
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        theme = parsed && parsed.settings && parsed.settings.theme;
+      }
+      if (!theme) {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      if (theme === 'dark') document.documentElement.classList.add('dark');
+    } catch (e) {
+      // bozuk veri olsa bile sayfa render'ını engelleme
+    }
+  })();
+</script>
+
+<!-- ============================================================ -->
+<!-- CDN Bağımlılıkları (sabit sürümler)                            -->
+<!-- ============================================================ -->
+<script src="https://cdn.tailwindcss.com/3.4.3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/all.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        colors: {
+          surface: { light: '#FFFFFF', dark: '#1C1C1E' },
+          appbg: { light: '#F5F5F7', dark: '#0B0B0D' },
+        },
+        fontFeatureSettings: { tnum: '"tnum" 1' }
+      }
+    }
+  };
+</script>
+
+<style>
+  :root { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #F5F5F7;
+    color: #1C1C1E;
+    transition: background-color 300ms ease-in-out, color 300ms ease-in-out;
+  }
+  html.dark body {
+    background-color: #0B0B0D;
+    color: #F5F5F7;
+  }
+
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  .glass {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .card-surface {
+    background-color: rgba(255,255,255,0.78);
+  }
+  html.dark .card-surface {
+    background-color: rgba(28,28,30,0.72);
+  }
+
+  .transition-smooth { transition: all 300ms ease-in-out; }
+
+  /* Scrollbar - takvim mobil kaydırma */
+  .scroll-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: rgba(120,120,128,0.4); border-radius: 999px; }
+
+  /* Modal fade/scale */
+  .modal-enter { animation: modalIn 220ms ease-out; }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .backdrop-enter { animation: fadeIn 200ms ease-out; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  progress-bar-fill { display:block; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,120,128,0.35); border-radius: 999px; }
+
+  [data-state-color="green"] { background-color: #34C759; }
+  [data-state-color="yellow"] { background-color: #FFC53D; }
+  [data-state-color="red"] { background-color: #FF453A; }
+
+  .focus-ring:focus-visible {
+    outline: 2px solid #6366F1;
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+
+<body class="min-h-screen bg-appbg-light dark:bg-appbg-dark">
+
+<!-- ================================================================= -->
+<!-- ÜST BAR                                                            -->
+<!-- ================================================================= -->
+<header class="sticky top-0 z-30 border-b border-black/5 dark:border-white/5 glass card-surface">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-600/30">
+        <i class="fa-solid fa-credit-card text-sm"></i>
+      </div>
+      <div class="hidden sm:block">
+        <p class="font-bold text-[15px] leading-none">Borç Panelim</p>
+        <p class="text-[11px] text-black/40 dark:text-white/40 mt-1">Kredi kartı yönetimi</p>
+      </div>
+    </div>
+
+    <nav class="flex items-center gap-1 sm:gap-2">
+      <button id="btnAdd" class="focus-ring transition-smooth flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 sm:px-4 h-10 rounded-full font-semibold text-sm shadow-sm shadow-indigo-600/30">
+        <i class="fa-solid fa-plus text-xs"></i>
+        <span class="hidden sm:inline">Ekle</span>
+      </button>
+
+      <button id="btnNotif" class="focus-ring transition-smooth relative w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
+        <i class="fa-regular fa-bell text-[15px]"></i>
+        <span id="notifBadge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center tabular"></span>
+      </button>
+
+      <button id="btnTheme" class="focus-ring transition-smooth w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
+        <i class="fa-solid fa-moon dark:hidden text-[15px]"></i>
+        <i class="fa-solid fa-sun hidden dark:inline text-[15px]"></i>
+      </button>
+
+      <button id="btnSettings" class="focus-ring transition-smooth w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
+        <i class="fa-solid fa-gear text-[15px]"></i>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Bildirim paneli -->
+  <div id="notifPanel" class="hidden absolute right-4 sm:right-6 top-16 w-[calc(100%-2rem)] sm:w-96 max-h-[70vh] overflow-y-auto rounded-2xl border border-black/5 dark:border-white/10 shadow-xl card-surface glass modal-enter">
+    <div class="p-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
+      <p class="font-semibold text-sm">Bildirimler</p>
+      <button id="notifClose" class="focus-ring w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark text-xs"></i></button>
+    </div>
+    <div id="notifList" class="p-2"></div>
+  </div>
+</header>
+
+<!-- ================================================================= -->
+<!-- ANA İÇERİK                                                         -->
+<!-- ================================================================= -->
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+  <!-- Boş durum -->
+  <section id="emptyState" class="hidden flex-col items-center text-center py-20 px-6 rounded-3xl border border-dashed border-black/10 dark:border-white/15">
+    <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center text-2xl mb-4">
+      <i class="fa-solid fa-wallet"></i>
+    </div>
+    <h2 class="text-lg font-bold">Henüz bir kartınız yok</h2>
+    <p class="text-sm text-black/50 dark:text-white/50 mt-1 max-w-xs">Borçlarınızı takip etmeye başlamak için ilk kredi kartınızı ekleyin.</p>
+    <button id="btnAddEmpty" class="focus-ring transition-smooth mt-5 bg-indigo-600 hover:bg-indigo-500 text-white px-5 h-11 rounded-full font-semibold text-sm">
+      <i class="fa-solid fa-plus mr-2 text-xs"></i>İlk kartınızı ekleyin
+    </button>
+  </section>
+
+  <div id="dashboardContent" class="space-y-6">
+    <!-- ÜST GRID: Donut + Widgetlar -->
+    <section class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <!-- Donut chart kartı -->
+      <div class="lg:col-span-2 rounded-3xl p-6 card-surface glass border border-black/5 dark:border-white/5 flex flex-col items-center justify-center relative">
+        <p class="text-sm font-semibold text-black/50 dark:text-white/50 self-start mb-2">Genel Durum</p>
+        <div class="relative w-full max-w-[220px]">
+          <canvas id="mainDonut" width="220" height="220"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Borç</p>
+            <p id="donutCenterAmount" class="text-2xl sm:text-3xl font-extrabold tabular leading-tight">₺0</p>
+            <p id="donutCenterPct" class="text-[11px] text-black/40 dark:text-white/40 mt-0.5">%0 kullanım</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 w-full mt-5 text-center">
+          <div>
+            <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Limit</p>
+            <p id="statTotalLimit" class="font-bold tabular text-sm">₺0</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-black/40 dark:text-white/40">Kalan Limit</p>
+            <p id="statRemainingLimit" class="font-bold tabular text-sm">₺0</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widgetlar -->
+      <div class="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
+          <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-3"><i class="fa-solid fa-clock text-sm"></i></div>
+          <p class="text-[11px] text-black/40 dark:text-white/40">Yaklaşan Ödemeler (7 gün)</p>
+          <p id="widgetUpcomingCount" class="text-2xl font-extrabold tabular mt-1">0</p>
+          <p id="widgetUpcomingSub" class="text-[11px] text-black/40 dark:text-white/40 mt-1">kart</p>
+        </div>
+        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center mb-3"><i class="fa-solid fa-sack-dollar text-sm"></i></div>
+          <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Asgari Ödeme</p>
+          <p id="widgetMinPayment" class="text-2xl font-extrabold tabular mt-1">₺0</p>
+        </div>
+        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-3"><i class="fa-solid fa-gauge text-sm"></i></div>
+          <p class="text-[11px] text-black/40 dark:text-white/40">Aylık Kullanım Oranı</p>
+          <p id="widgetUsageRate" class="text-2xl font-extrabold tabular mt-1">%0</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- KART GRID -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-[15px]">Kartlarım</h2>
+        <span id="cardCountLabel" class="text-xs text-black/40 dark:text-white/40"></span>
+      </div>
+      <div id="cardGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- TAKVİM -->
+    <section class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <button id="calPrev" class="focus-ring transition-smooth w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+          <h3 id="calTitle" class="font-bold text-[15px] w-32 text-center tabular"></h3>
+          <button id="calNext" class="focus-ring transition-smooth w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+        </div>
+        <div class="flex items-center gap-3 text-[11px] text-black/40 dark:text-white/40">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Kesim</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Son ödeme</span>
+        </div>
+      </div>
+      <div class="overflow-x-auto scroll-thin">
+        <div id="calWeekdays" class="grid grid-cols-7 min-w-[560px] text-center text-[11px] font-semibold text-black/40 dark:text-white/40 mb-2"></div>
+        <div id="calGrid" class="grid grid-cols-7 min-w-[560px] gap-1"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ================================================================= -->
+<!-- GÜN DETAY POPOVER                                                  -->
+<!-- ================================================================= -->
+<div id="dayPopoverBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
+  <div id="dayPopover" class="modal-enter w-full sm:w-96 rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-3">
+      <h3 id="dayPopoverTitle" class="font-bold text-[15px]"></h3>
+      <button id="dayPopoverClose" class="focus-ring w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark text-xs"></i></button>
+    </div>
+    <div id="dayPopoverList" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- ================================================================= -->
+<!-- EKLEME MODALI (Seçim ekranı + formlar)                             -->
+<!-- ================================================================= -->
+<div id="addModalBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
+  <div class="modal-enter w-full sm:w-[440px] rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl overflow-hidden">
+
+    <!-- Seçim ekranı -->
+    <div id="addStepChoice" class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="font-bold text-lg">Ne eklemek istersin?</h3>
+        <button id="addModalClose1" class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <button id="choiceNewCard" class="focus-ring transition-smooth text-left p-4 rounded-2xl border border-black/10 dark:border-white/10 hover:border-indigo-500 hover:bg-indigo-500/5">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center mb-3"><i class="fa-solid fa-credit-card"></i></div>
+          <p class="font-semibold text-sm">Yeni Kart</p>
+          <p class="text-xs text-black/40 dark:text-white/40 mt-0.5">Kredi kartı ekle</p>
+        </button>
+        <button id="choiceNewTx" class="focus-ring transition-smooth text-left p-4 rounded-2xl border border-black/10 dark:border-white/10 hover:border-indigo-500 hover:bg-indigo-500/5">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-3"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+          <p class="font-semibold text-sm">Harcama / Ödeme</p>
+          <p class="text-xs text-black/40 dark:text-white/40 mt-0.5">İşlem ekle</p>
+        </button>
+      </div>
+    </div>
+
+    <!-- Yeni Kart formu -->
+    <form id="formNewCard" class="hidden p-6 space-y-3.5 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-1">
+        <button type="button" data-back class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-arrow-left text-sm"></i></button>
+        <h3 class="font-bold text-base">Yeni Kart</h3>
+        <button type="button" class="add-modal-close focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Banka Adı</label>
+        <input name="bankName" type="text" required placeholder="Örn. Garanti BBVA" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
+        <p class="err-bankName hidden text-xs text-red-500 mt-1"></p>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Kart Etiketi (opsiyonel)</label>
+        <input name="cardLabel" type="text" placeholder="Örn. Bonus Card" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Limit (₺)</label>
+          <input name="limit" type="text" inputmode="decimal" required placeholder="50.000" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+          <p class="err-limit hidden text-xs text-red-500 mt-1"></p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Renk</label>
+          <input name="color" type="color" value="#6366F1" class="focus-ring w-full mt-1 h-11 rounded-xl border border-black/10 dark:border-white/10 bg-transparent cursor-pointer">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Hesap Kesim Günü</label>
+          <input name="statementDay" type="number" min="1" max="31" required placeholder="15" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+          <p class="err-statementDay hidden text-xs text-red-500 mt-1"></p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Son Ödeme Günü</label>
+          <input name="dueDay" type="number" min="1" max="31" required placeholder="5" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+          <p class="err-dueDay hidden text-xs text-red-500 mt-1"></p>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Asgari Ödeme Oranı</label>
+        <select name="minPaymentRate" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
+          <option value="0.20" selected>%20</option>
+          <option value="0.40">%40</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Mevcut Borç (opsiyonel)</label>
+        <input name="currentDebt" type="text" inputmode="decimal" placeholder="0" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+      </div>
+      <button type="submit" class="focus-ring transition-smooth w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm mt-2">Kartı Kaydet</button>
+    </form>
+
+    <!-- Harcama/Ödeme formu -->
+    <form id="formNewTx" class="hidden p-6 space-y-3.5 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-1">
+        <button type="button" data-back class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-arrow-left text-sm"></i></button>
+        <h3 class="font-bold text-base">Harcama / Ödeme</h3>
+        <button type="button" class="add-modal-close focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Kart</label>
+        <select name="cardId" required class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm"></select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tür</label>
+        <div class="grid grid-cols-2 gap-2 mt-1">
+          <label class="focus-ring transition-smooth flex items-center justify-center gap-2 h-11 rounded-xl border border-black/10 dark:border-white/10 text-sm cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-500/5">
+            <input type="radio" name="type" value="expense" checked class="accent-red-500"><span>Harcama</span>
+          </label>
+          <label class="focus-ring transition-smooth flex items-center justify-center gap-2 h-11 rounded-xl border border-black/10 dark:border-white/10 text-sm cursor-pointer has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
+            <input type="radio" name="type" value="payment" class="accent-emerald-500"><span>Ödeme</span>
+          </label>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tutar (₺)</label>
+        <input name="amount" type="text" inputmode="decimal" required placeholder="350,50" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+        <p class="err-amount hidden text-xs text-red-500 mt-1"></p>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Açıklama</label>
+        <input name="description" type="text" placeholder="Örn. Market alışverişi" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tarih</label>
+        <input name="date" type="date" required class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+      </div>
+      <button type="submit" class="focus-ring transition-smooth w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm mt-2">İşlemi Kaydet</button>
+    </form>
+  </div>
+</div>
+
+<!-- ================================================================= -->
+<!-- AYARLAR MODALI                                                     -->
+<!-- ================================================================= -->
+<div id="settingsBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
+  <div class="modal-enter w-full sm:w-[420px] rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+    <div class="flex items-center justify-between">
+      <h3 class="font-bold text-lg">Ayarlar & Veri Yedekleme</h3>
+      <button id="settingsClose" class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div>
+      <label class="text-xs font-semibold text-black/50 dark:text-white/50">Bildirim Eşiği (gün)</label>
+      <input id="settingThreshold" type="number" min="1" max="30" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
+    </div>
+
+    <div class="space-y-2 pt-2 border-t border-black/5 dark:border-white/10">
+      <button id="btnExport" class="focus-ring transition-smooth w-full h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-black/5 dark:hover:bg-white/10">
+        <i class="fa-solid fa-download text-xs"></i>JSON olarak Dışa Aktar
+      </button>
+      <button id="btnImport" class="focus-ring transition-smooth w-full h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-black/5 dark:hover:bg-white/10">
+        <i class="fa-solid fa-upload text-xs"></i>İçe Aktar
+      </button>
+      <input id="importFileInput" type="file" accept="application/json" class="hidden">
+      <p id="importMsg" class="hidden text-xs mt-1"></p>
+    </div>
+
+    <div class="pt-2 border-t border-black/5 dark:border-white/10">
+      <button id="btnResetAll" class="focus-ring transition-smooth w-full h-11 rounded-xl bg-red-500/10 text-red-500 font-semibold text-sm hover:bg-red-500/20">
+        <i class="fa-solid fa-trash text-xs mr-2"></i>Tüm Verileri Sıfırla
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Onay / bilgi toast -->
+<div id="toastHost" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 space-y-2 w-[calc(100%-2rem)] max-w-sm"></div>
+
+<!-- Genel onay diyaloğu -->
+<div id="confirmBackdrop" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-enter flex items-center justify-center p-4">
+  <div class="modal-enter w-full sm:w-96 rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-6">
+    <p id="confirmTitle" class="font-bold text-base mb-1.5"></p>
+    <p id="confirmMsg" class="text-sm text-black/60 dark:text-white/60 mb-5"></p>
+    <div class="flex gap-2">
+      <button id="confirmCancel" class="focus-ring transition-smooth flex-1 h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm hover:bg-black/5 dark:hover:bg-white/10">Vazgeç</button>
+      <button id="confirmOk" class="focus-ring transition-smooth flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm">Onayla</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =============================================================== */
+  /* CONFIG — tüm sabitler tek yerde                                   */
+  /* =============================================================== */
+  var CONFIG = {
+    STORAGE_KEY: 'kkp_data',
+    USAGE_THRESHOLDS: { yellow: 0.50, red: 0.80 }, // %50-80 sarı, >%80 kırmızı
+    STATE_COLORS: { green: '#34C759', yellow: '#FFC53D', red: '#FF453A' },
+    DEFAULT_NOTIF_THRESHOLD_DAYS: 5,
+    DEFAULT_MIN_PAYMENT_RATE: 0.20,
+    CURRENCY: 'TRY',
+    LOCALE: 'tr-TR',
+    WEEKDAYS_MON_FIRST: ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'],
+    MONTH_NAMES: ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'],
+    BANK_ICON_MAP: {
+      'garanti': 'fa-solid fa-building-columns',
+      'is bankasi': 'fa-solid fa-building-columns',
+      'işbank': 'fa-solid fa-building-columns',
+      'akbank': 'fa-solid fa-building-columns',
+      'yapi kredi': 'fa-solid fa-building-columns',
+      'yapı kredi': 'fa-solid fa-building-columns',
+      'ziraat': 'fa-solid fa-building-columns',
+      'halkbank': 'fa-solid fa-building-columns',
+      'qnb': 'fa-solid fa-building-columns',
+      'denizbank': 'fa-solid fa-building-columns',
+      'teb': 'fa-solid fa-building-columns',
+      'enpara': 'fa-solid fa-mobile-screen'
+    },
+    DEFAULT_BANK_ICON: 'fa-solid fa-credit-card'
+  };
+
+  var fmtCurrency = new Intl.NumberFormat(CONFIG.LOCALE, { style: 'currency', currency: CONFIG.CURRENCY, maximumFractionDigits: 0 });
+  var fmtCurrencyPrecise = new Intl.NumberFormat(CONFIG.LOCALE, { style: 'currency', currency: CONFIG.CURRENCY, maximumFractionDigits: 2 });
+
+  /* =============================================================== */
+  /* Store — LocalStorage CRUD                                         */
+  /* =============================================================== */
+  var Store = {
+    _cache: null,
+
+    _defaultData: function () {
+      return {
+        cards: [],
+        transactions: [],
+        settings: {
+          theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+          currency: 'TRY',
+          notificationThresholdDays: CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS
+        }
+      };
+    },
+
+    load: function () {
+      if (this._cache) return this._cache;
+      var raw = null;
+      try {
+        raw = localStorage.getItem(CONFIG.STORAGE_KEY);
+      } catch (e) {
+        Toast.show('Depolamaya erişilemedi. Tarayıcı ayarlarınızı kontrol edin.', 'error');
+        this._cache = this._defaultData();
+        return this._cache;
+      }
+      if (!raw) {
+        this._cache = this._defaultData();
+        return this._cache;
+      }
+      try {
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.cards) || !Array.isArray(parsed.transactions)) {
+          throw new Error('şema geçersiz');
+        }
+        if (!parsed.settings) parsed.settings = this._defaultData().settings;
+        if (typeof parsed.settings.notificationThresholdDays !== 'number') {
+          parsed.settings.notificationThresholdDays = CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
+        }
+        this._cache = parsed;
+      } catch (e) {
+        this._cache = this._defaultData();
+        DataRecovery.offer();
+      }
+      return this._cache;
+    },
+
+    save: function () {
+      try {
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(this._cache));
+        return true;
+      } catch (e) {
+        Toast.show('Depolama alanı dolu. Bazı verileri dışa aktarıp temizleyin.', 'error');
+        return false;
+      }
+    },
+
+    getData: function () { return this.load(); },
+
+    addCard: function (card) {
+      var data = this.load();
+      data.cards.push(card);
+      return this.save();
+    },
+
+    updateSettings: function (patch) {
+      var data = this.load();
+      Object.assign(data.settings, patch);
+      return this.save();
+    },
+
+    addTransaction: function (tx) {
+      var data = this.load();
+      data.transactions.push(tx);
+      return this.save();
+    },
+
+    replaceAll: function (newData) {
+      this._cache = newData;
+      return this.save();
+    },
+
+    resetAll: function () {
+      this._cache = this._defaultData();
+      return this.save();
+    },
+
+    uuid: function () {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+  };
+
+  /* =============================================================== */
+  /* Calc — tarih / borç hesaplamaları                                 */
+  /* =============================================================== */
+  var Calc = {
+    clampDayToMonth: function (year, monthIndex, day) {
+      var lastDay = new Date(year, monthIndex + 1, 0).getDate();
+      return Math.min(day, lastDay);
+    },
+
+    // Bugünden sonraki en yakın "day" gününü (ay/gün) hesaplar
+    nextOccurrence: function (day, fromDate) {
+      var now = fromDate || new Date();
+      now.setHours(0, 0, 0, 0);
+      var year = now.getFullYear();
+      var month = now.getMonth();
+      var candidateDay = this.clampDayToMonth(year, month, day);
+      var candidate = new Date(year, month, candidateDay);
+      if (candidate < now) {
+        month += 1;
+        if (month > 11) { month = 0; year += 1; }
+        candidateDay = this.clampDayToMonth(year, month, day);
+        candidate = new Date(year, month, candidateDay);
+      }
+      return candidate;
+    },
+
+    daysUntil: function (targetDate, fromDate) {
+      var now = fromDate || new Date();
+      now.setHours(0, 0, 0, 0);
+      var t = new Date(targetDate);
+      t.setHours(0, 0, 0, 0);
+      return Math.round((t - now) / 86400000);
+    },
+
+    cardDebt: function (cardId, transactions) {
+      var debt = 0;
+      transactions.forEach(function (tx) {
+        if (tx.cardId !== cardId) return;
+        if (tx.type === 'expense') debt += tx.amount;
+        else if (tx.type === 'payment') debt -= tx.amount;
+      });
+      if (debt < 0) debt = 0;
+      return Math.round(debt * 100) / 100;
+    },
+
+    usageState: function (ratio) {
+      if (ratio > CONFIG.USAGE_THRESHOLDS.red) return 'red';
+      if (ratio > CONFIG.USAGE_THRESHOLDS.yellow) return 'yellow';
+      return 'green';
+    },
+
+    minPaymentFor: function (card) {
+      var debt = this.cardDebt(card.id, Store.getData().transactions);
+      return Math.round(debt * card.minPaymentRate * 100) / 100;
+    },
+
+    parseTurkishNumber: function (str) {
+      if (typeof str !== 'string') return NaN;
+      var cleaned = str.trim().replace(/\./g, '').replace(',', '.');
+      // Eğer tek nokta varsa ve virgül yoksa (ör. "350.50" İngilizce girilmiş olabilir) — basit yaklaşım:
+      if (!/,/.test(str) && /\.\d{1,2}$/.test(str.trim()) && (str.match(/\./g) || []).length === 1) {
+        cleaned = str.trim();
+      }
+      return parseFloat(cleaned);
+    }
+  };
+
+  /* =============================================================== */
+  /* Toast                                                              */
+  /* =============================================================== */
+  var Toast = {
+    show: function (msg, kind) {
+      kind = kind || 'info';
+      var colors = {
+        info: 'bg-indigo-600',
+        error: 'bg-red-500',
+        success: 'bg-emerald-500'
+      };
+      var el = document.createElement('div');
+      el.className = 'transition-smooth ' + (colors[kind] || colors.info) + ' text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg opacity-0 translate-y-2';
+      el.textContent = msg;
+      document.getElementById('toastHost').appendChild(el);
+      requestAnimationFrame(function () {
+        el.classList.remove('opacity-0', 'translate-y-2');
+      });
+      setTimeout(function () {
+        el.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(function () { el.remove(); }, 300);
+      }, 3200);
+    }
+  };
+
+  /* =============================================================== */
+  /* Onay diyaloğu (alert() kullanılmıyor)                              */
+  /* =============================================================== */
+  var Confirm = {
+    ask: function (title, msg, onConfirm) {
+      var backdrop = document.getElementById('confirmBackdrop');
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMsg').textContent = msg;
+      backdrop.classList.remove('hidden');
+      var okBtn = document.getElementById('confirmOk');
+      var cancelBtn = document.getElementById('confirmCancel');
+      function cleanup() {
+        backdrop.classList.add('hidden');
+        okBtn.removeEventListener('click', okHandler);
+        cancelBtn.removeEventListener('click', cancelHandler);
+      }
+      function okHandler() { cleanup(); onConfirm(); }
+      function cancelHandler() { cleanup(); }
+      okBtn.addEventListener('click', okHandler);
+      cancelBtn.addEventListener('click', cancelHandler);
+    }
+  };
+
+  var DataRecovery = {
+    offer: function () {
+      Confirm.ask(
+        'Verileriniz okunamadı',
+        'Kayıtlı veriniz bozuk görünüyor. Sıfırdan başlamak için devam edin, ya da Ayarlar > İçe Aktar ile bir yedek yükleyin.',
+        function () { Toast.show('Yeni bir başlangıç yapıldı.', 'info'); }
+      );
+    }
+  };
+
+  /* =============================================================== */
+  /* Charts                                                             */
+  /* =============================================================== */
+  var Charts = {
+    donut: null,
+
+    renderDonut: function (totalLimit, totalDebt) {
+      var ctx = document.getElementById('mainDonut').getContext('2d');
+      var remaining = Math.max(totalLimit - totalDebt, 0);
+      var ratio = totalLimit > 0 ? totalDebt / totalLimit : 0;
+      var state = Calc.usageState(ratio);
+      var debtColor = CONFIG.STATE_COLORS[state];
+
+      var data = totalLimit > 0
+        ? [totalDebt, remaining]
+        : [1];
+      var colors = totalLimit > 0
+        ? [debtColor, document.documentElement.classList.contains('dark') ? '#3A3A3C' : '#E5E5EA']
+        : [document.documentElement.classList.contains('dark') ? '#3A3A3C' : '#E5E5EA'];
+
+      if (this.donut) {
+        this.donut.data.datasets[0].data = data;
+        this.donut.data.datasets[0].backgroundColor = colors;
+        this.donut.update();
+        return;
+      }
+
+      this.donut = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Borç', 'Kalan Limit'],
+          datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
+        },
+        options: {
+          cutout: '76%',
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: totalLimit > 0,
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.label + ': ' + ctx.parsed.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
+                }
+              }
+            }
+          },
+          animation: { duration: 300 }
+        }
+      });
+    }
+  };
+
+  /* =============================================================== */
+  /* UI — render fonksiyonları                                         */
+  /* =============================================================== */
+  var UI = {
+    calState: { year: new Date().getFullYear(), month: new Date().getMonth() },
+
+    renderAll: function () {
+      var data = Store.getData();
+      var hasCards = data.cards.length > 0;
+      document.getElementById('emptyState').classList.toggle('hidden', hasCards);
+      document.getElementById('emptyState').classList.toggle('flex', !hasCards);
+      document.getElementById('dashboardContent').classList.toggle('hidden', !hasCards);
+
+      this.renderStats();
+      this.renderCardGrid();
+      this.renderCalendar();
+      this.renderNotifications();
+    },
+
+    stateColorClasses: function (state) {
+      return { green: 'bg-emerald-500', yellow: 'bg-amber-400', red: 'bg-red-500' }[state];
+    },
+
+    renderStats: function () {
+      var data = Store.getData();
+      var totalLimit = 0, totalDebt = 0, totalMinPayment = 0;
+      var upcomingCardIds = new Set();
+
+      data.cards.forEach(function (card) {
+        var debt = Calc.cardDebt(card.id, data.transactions);
+        totalLimit += card.limit;
+        totalDebt += debt;
+        totalMinPayment += Math.round(debt * card.minPaymentRate * 100) / 100;
+
+        var nextDue = Calc.nextOccurrence(card.dueDay);
+        var days = Calc.daysUntil(nextDue);
+        if (days >= 0 && days <= 7) upcomingCardIds.add(card.id);
+      });
+
+      var ratio = totalLimit > 0 ? totalDebt / totalLimit : 0;
+
+      document.getElementById('donutCenterAmount').textContent = fmtCurrency.format(totalDebt);
+      document.getElementById('donutCenterPct').textContent = '%' + Math.round(ratio * 100) + ' kullanım';
+      document.getElementById('statTotalLimit').textContent = fmtCurrency.format(totalLimit);
+      document.getElementById('statRemainingLimit').textContent = fmtCurrency.format(Math.max(totalLimit - totalDebt, 0));
+
+      document.getElementById('widgetUpcomingCount').textContent = upcomingCardIds.size;
+      document.getElementById('widgetUpcomingSub').textContent = upcomingCardIds.size === 1 ? 'kart' : 'kart';
+      document.getElementById('widgetMinPayment').textContent = fmtCurrency.format(totalMinPayment);
+      document.getElementById('widgetUsageRate').textContent = '%' + Math.round(ratio * 100);
+
+      document.getElementById('cardCountLabel').textContent = data.cards.length + ' kart';
+
+      Charts.renderDonut(totalLimit, totalDebt);
+    },
+
+    matchBankIcon: function (bankName) {
+      var key = (bankName || '').toLowerCase().trim();
+      for (var k in CONFIG.BANK_ICON_MAP) {
+        if (key.indexOf(k) !== -1) return CONFIG.BANK_ICON_MAP[k];
+      }
+      return CONFIG.DEFAULT_BANK_ICON;
+    },
+
+    renderCardGrid: function () {
+      var data = Store.getData();
+      var grid = document.getElementById('cardGrid');
+      grid.innerHTML = '';
+
+      data.cards.forEach(function (card) {
+        var debt = Calc.cardDebt(card.id, data.transactions);
+        var ratio = card.limit > 0 ? debt / card.limit : 0;
+        var state = Calc.usageState(ratio);
+        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
+        var nextDue = Calc.nextOccurrence(card.dueDay);
+        var daysLeft = Calc.daysUntil(nextDue);
+        var isOverdue = daysLeft < 0;
+
+        var wrap = document.createElement('div');
+        wrap.className = 'transition-smooth rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5 hover:shadow-md';
+
+        var iconClass = UI.matchBankIcon(card.bankName);
+        var barColorClass = UI.stateColorClasses(state);
+
+        var bankNameEl = document.createElement('span');
+        bankNameEl.textContent = card.bankName;
+        var labelEl = document.createElement('span');
+        labelEl.textContent = card.cardLabel || '';
+
+        wrap.innerHTML =
+          '<div class="flex items-start justify-between mb-4">' +
+            '<div class="flex items-center gap-3">' +
+              '<div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white text-sm shrink-0" style="background-color:' + escapeAttr(card.color || '#6366F1') + '">' +
+                '<i class="' + iconClass + '"></i>' +
+              '</div>' +
+              '<div class="min-w-0">' +
+                '<p class="font-bold text-sm truncate bank-name-slot"></p>' +
+                '<p class="text-xs text-black/40 dark:text-white/40 truncate label-slot"></p>' +
+              '</div>' +
+            '</div>' +
+            (isOverdue ? '<span class="shrink-0 text-[10px] font-bold px-2 py-1 rounded-full bg-red-600 text-white">GECİKTİ</span>' : '') +
+          '</div>' +
+          '<p class="text-2xl font-extrabold tabular mb-1">' + fmtCurrency.format(debt) + '</p>' +
+          '<p class="text-[11px] text-black/40 dark:text-white/40 mb-3">Limit: ' + fmtCurrency.format(card.limit) + '</p>' +
+          '<div class="h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden mb-3">' +
+            '<div class="h-full ' + barColorClass + ' transition-smooth" style="width:' + Math.min(ratio * 100, 100) + '%"></div>' +
+          '</div>' +
+          '<div class="grid grid-cols-2 gap-2 text-xs">' +
+            '<div class="rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-2.5">' +
+              '<p class="text-black/40 dark:text-white/40 text-[10px]">Asgari Ödeme</p>' +
+              '<p class="font-semibold tabular mt-0.5">' + fmtCurrency.format(minPay) + '</p>' +
+            '</div>' +
+            '<div class="rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-2.5">' +
+              '<p class="text-black/40 dark:text-white/40 text-[10px]">Son Ödemeye</p>' +
+              '<p class="font-semibold tabular mt-0.5">' + (isOverdue ? 'Geçti' : daysLeft + ' gün') + '</p>' +
+            '</div>' +
+          '</div>';
+
+        wrap.querySelector('.bank-name-slot').textContent = card.bankName;
+        wrap.querySelector('.label-slot').textContent = card.cardLabel || '';
+        grid.appendChild(wrap);
+      });
+    },
+
+    /* ---------------- Takvim ---------------- */
+    renderCalendar: function () {
+      var data = Store.getData();
+      var y = this.calState.year, m = this.calState.month;
+      document.getElementById('calTitle').textContent = CONFIG.MONTH_NAMES[m] + ' ' + y;
+
+      var wd = document.getElementById('calWeekdays');
+      wd.innerHTML = '';
+      CONFIG.WEEKDAYS_MON_FIRST.forEach(function (d) {
+        var s = document.createElement('div');
+        s.textContent = d;
+        wd.appendChild(s);
+      });
+
+      var grid = document.getElementById('calGrid');
+      grid.innerHTML = '';
+
+      var firstOfMonth = new Date(y, m, 1);
+      var startOffset = (firstOfMonth.getDay() + 6) % 7; // Pazartesi=0
+      var daysInMonth = new Date(y, m + 1, 0).getDate();
+      var today = new Date(); today.setHours(0,0,0,0);
+
+      // Ay içi kesim/ödeme günlerini eşle
+      var dayMarks = {}; // day -> {statement: [cardName...], due: [cardName...]}
+      for (var d = 1; d <= daysInMonth; d++) dayMarks[d] = { statement: [], due: [] };
+
+      data.cards.forEach(function (card) {
+        var sDay = Calc.clampDayToMonth(y, m, card.statementDay);
+        var dDay = Calc.clampDayToMonth(y, m, card.dueDay);
+        dayMarks[sDay].statement.push(card);
+        dayMarks[dDay].due.push(card);
+      });
+
+      for (var i = 0; i < startOffset; i++) {
+        var empty = document.createElement('div');
+        empty.className = 'h-16 sm:h-20';
+        grid.appendChild(empty);
+      }
+
+      for (var day = 1; day <= daysInMonth; day++) {
+        var cellDate = new Date(y, m, day);
+        var isToday = cellDate.getTime() === today.getTime();
+        var marks = dayMarks[day];
+
+        var cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'focus-ring transition-smooth h-16 sm:h-20 rounded-xl border text-left p-1.5 flex flex-col justify-between ' +
+          (isToday ? 'border-indigo-500 bg-indigo-500/5' : 'border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5');
+
+        var dotsHtml = '';
+        if (marks.statement.length) {
+          dotsHtml += '<span class="inline-flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>' +
+            (marks.statement.length > 1 ? '<span class="text-[9px] text-amber-500 font-bold">' + marks.statement.length + '</span>' : '') + '</span>';
+        }
+        if (marks.due.length) {
+          dotsHtml += '<span class="inline-flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>' +
+            (marks.due.length > 1 ? '<span class="text-[9px] text-red-500 font-bold">' + marks.due.length + '</span>' : '') + '</span>';
+        }
+
+        cell.innerHTML =
+          '<span class="text-xs font-semibold tabular">' + day + '</span>' +
+          '<div class="flex items-center gap-1.5">' + dotsHtml + '</div>';
+
+        cell.addEventListener('click', function (dayNum, marksForDay) {
+          return function () { UI.openDayPopover(dayNum, marksForDay); };
+        }(day, marks));
+
+        grid.appendChild(cell);
+      }
+    },
+
+    openDayPopover: function (day, marks) {
+      if (!marks.statement.length && !marks.due.length) return;
+      var y = this.calState.year, m = this.calState.month;
+      document.getElementById('dayPopoverTitle').textContent = day + ' ' + CONFIG.MONTH_NAMES[m] + ' ' + y;
+      var list = document.getElementById('dayPopoverList');
+      list.innerHTML = '';
+      var data = Store.getData();
+
+      marks.statement.forEach(function (card) {
+        var debt = Calc.cardDebt(card.id, data.transactions);
+        list.appendChild(UI.dayPopoverRow(card, 'Hesap Kesim Günü', debt, 'amber'));
+      });
+      marks.due.forEach(function (card) {
+        var debt = Calc.cardDebt(card.id, data.transactions);
+        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
+        list.appendChild(UI.dayPopoverRow(card, 'Son Ödeme Günü · Asgari ' + fmtCurrency.format(minPay), debt, 'red'));
+      });
+
+      document.getElementById('dayPopoverBackdrop').classList.remove('hidden');
+    },
+
+    dayPopoverRow: function (card, label, amount, dotColor) {
+      var row = document.createElement('div');
+      row.className = 'flex items-center justify-between p-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.05]';
+      var dotClass = dotColor === 'amber' ? 'bg-amber-400' : 'bg-red-500';
+      row.innerHTML =
+        '<div class="flex items-center gap-2.5 min-w-0">' +
+          '<span class="w-2 h-2 rounded-full ' + dotClass + ' shrink-0"></span>' +
+          '<div class="min-w-0">' +
+            '<p class="text-sm font-semibold truncate name-slot"></p>' +
+            '<p class="text-[11px] text-black/40 dark:text-white/40 truncate label-slot"></p>' +
+          '</div>' +
+        '</div>' +
+        '<p class="text-sm font-bold tabular shrink-0 ml-2">' + fmtCurrency.format(amount) + '</p>';
+      row.querySelector('.name-slot').textContent = card.bankName + (card.cardLabel ? ' · ' + card.cardLabel : '');
+      row.querySelector('.label-slot').textContent = label;
+      return row;
+    },
+
+    /* ---------------- Bildirimler ---------------- */
+    renderNotifications: function () {
+      var data = Store.getData();
+      var thresholdDays = data.settings.notificationThresholdDays || CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
+      var items = [];
+
+      data.cards.forEach(function (card) {
+        var nextDue = Calc.nextOccurrence(card.dueDay);
+        var days = Calc.daysUntil(nextDue);
+        var debt = Calc.cardDebt(card.id, data.transactions);
+        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
+
+        // Gecikmiş olma durumu: gerçek geçmiş tarih bugünden önce VE borç > 0
+        var rawDue = new Date(card._year || nextDue.getFullYear(), nextDue.getMonth(), nextDue.getDate());
+        var isOverdue = false;
+        // Basit gecikme kontrolü: bu ayki ödeme günü geçmiş ve halihazırda borç varsa ve nextOccurrence zaten bir sonraki aya sarmışsa
+        var thisMonthDueDay = Calc.clampDayToMonth(new Date().getFullYear(), new Date().getMonth(), card.dueDay);
+        var thisMonthDue = new Date(new Date().getFullYear(), new Date().getMonth(), thisMonthDueDay);
+        var todayD = new Date(); todayD.setHours(0,0,0,0);
+        if (thisMonthDue < todayD && debt > 0) isOverdue = true;
+
+        if (isOverdue) {
+          items.push({ card: card, days: 0, debt: debt, minPay: minPay, overdue: true });
+        } else if (days >= 0 && days <= thresholdDays) {
+          items.push({ card: card, days: days, debt: debt, minPay: minPay, overdue: false });
+        }
+      });
+
+      var badge = document.getElementById('notifBadge');
+      var uniqueCount = items.length;
+      if (uniqueCount > 0) {
+        badge.textContent = uniqueCount > 99 ? '99+' : uniqueCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+
+      var list = document.getElementById('notifList');
+      list.innerHTML = '';
+      if (items.length === 0) {
+        var empty = document.createElement('p');
+        empty.className = 'text-xs text-black/40 dark:text-white/40 text-center py-6';
+        empty.textContent = 'Yaklaşan bir ödeme yok.';
+        list.appendChild(empty);
+        return;
+      }
+
+      items.sort(function (a, b) { return (a.overdue === b.overdue) ? a.days - b.days : (a.overdue ? -1 : 1); });
+
+      items.forEach(function (it) {
+        var row = document.createElement('div');
+        row.className = 'flex items-start gap-3 p-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-smooth';
+        var iconBg = it.overdue ? 'bg-red-600' : 'bg-amber-400';
+        row.innerHTML =
+          '<div class="w-8 h-8 rounded-full ' + iconBg + ' text-white flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid ' + (it.overdue ? 'fa-triangle-exclamation' : 'fa-bell') + ' text-[11px]"></i></div>' +
+          '<div class="min-w-0 flex-1">' +
+            '<p class="text-sm font-semibold truncate title-slot"></p>' +
+            '<p class="text-xs text-black/50 dark:text-white/50 mt-0.5">Asgari: ' + fmtCurrency.format(it.minPay) + ' · Toplam: ' + fmtCurrency.format(it.debt) + '</p>' +
+            (it.overdue ? '<span class="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">GECİKTİ</span>' : '') +
+          '</div>';
+        row.querySelector('.title-slot').textContent = it.card.bankName + ' – ' + (it.overdue ? 'Son ödeme tarihi geçti' : 'Son ödemeye ' + it.days + ' gün kaldı');
+        list.appendChild(row);
+      });
+    },
+
+    populateCardSelect: function () {
+      var data = Store.getData();
+      var sel = document.querySelector('select[name="cardId"]');
+      sel.innerHTML = '';
+      data.cards.forEach(function (card) {
+        var opt = document.createElement('option');
+        opt.value = card.id;
+        opt.textContent = card.bankName + (card.cardLabel ? ' · ' + card.cardLabel : '');
+        sel.appendChild(opt);
+      });
+    }
+  };
+
+  function escapeAttr(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* =============================================================== */
+  /* Events                                                            */
+  /* =============================================================== */
+  var Events = {
+    init: function () {
+      this.bindTheme();
+      this.bindAddModal();
+      this.bindNotifPanel();
+      this.bindCalendar();
+      this.bindDayPopover();
+      this.bindSettings();
+    },
+
+    bindTheme: function () {
+      document.getElementById('btnTheme').addEventListener('click', function () {
+        var isDark = document.documentElement.classList.toggle('dark');
+        Store.updateSettings({ theme: isDark ? 'dark' : 'light' });
+        Charts.donut = null; // renk şeması değiştiği için grafiği yeniden oluştur
+        UI.renderStats();
+      });
+    },
+
+    bindNotifPanel: function () {
+      var btn = document.getElementById('btnNotif');
+      var panel = document.getElementById('notifPanel');
+      btn.addEventListener('click', function () {
+        panel.classList.toggle('hidden');
+      });
+      document.getElementById('notifClose').addEventListener('click', function () {
+        panel.classList.add('hidden');
+      });
+      document.addEventListener('click', function (e) {
+        if (!panel.contains(e.target) && !btn.contains(e.target)) panel.classList.add('hidden');
+      });
+    },
+
+    bindCalendar: function () {
+      document.getElementById('calPrev').addEventListener('click', function () {
+        UI.calState.month--;
+        if (UI.calState.month < 0) { UI.calState.month = 11; UI.calState.year--; }
+        UI.renderCalendar();
+      });
+      document.getElementById('calNext').addEventListener('click', function () {
+        UI.calState.month++;
+        if (UI.calState.month > 11) { UI.calState.month = 0; UI.calState.year++; }
+        UI.renderCalendar();
+      });
+    },
+
+    bindDayPopover: function () {
+      document.getElementById('dayPopoverClose').addEventListener('click', function () {
+        document.getElementById('dayPopoverBackdrop').classList.add('hidden');
+      });
+      document.getElementById('dayPopoverBackdrop').addEventListener('click', function (e) {
+        if (e.target === this) this.classList.add('hidden');
+      });
+    },
+
+    resetAddModal: function () {
+      document.getElementById('addStepChoice').classList.remove('hidden');
+      document.getElementById('formNewCard').classList.add('hidden');
+      document.getElementById('formNewTx').classList.add('hidden');
+      document.getElementById('formNewCard').reset();
+      document.getElementById('formNewTx').reset();
+      document.querySelectorAll('#addModalBackdrop [class*="err-"]').forEach(function (el) { el.classList.add('hidden'); });
+    },
+
+    openAddModal: function () {
+      Events.resetAddModal();
+      var data = Store.getData();
+      if (data.cards.length === 0) {
+        // kart yoksa direkt kart formuna geç
+        document.getElementById('addStepChoice').classList.add('hidden');
+        document.getElementById('formNewCard').classList.remove('hidden');
+      }
+      document.getElementById('addModalBackdrop').classList.remove('hidden');
+      document.querySelector('input[name="date"]').valueAsDate = new Date();
+    },
+
+    bindAddModal: function () {
+      document.getElementById('btnAdd').addEventListener('click', Events.openAddModal);
+      document.getElementById('btnAddEmpty').addEventListener('click', Events.openAddModal);
+
+      document.querySelectorAll('.add-modal-close, #addModalClose1').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.getElementById('addModalBackdrop').classList.add('hidden');
+        });
+      });
+      document.getElementById('addModalBackdrop').addEventListener('click', function (e) {
+        if (e.target === this) this.classList.add('hidden');
+      });
+
+      document.getElementById('choiceNewCard').addEventListener('click', function () {
+        document.getElementById('addStepChoice').classList.add('hidden');
+        document.getElementById('formNewCard').classList.remove('hidden');
+      });
+      document.getElementById('choiceNewTx').addEventListener('click', function () {
+        if (Store.getData().cards.length === 0) {
+          Toast.show('Önce bir kart eklemelisiniz.', 'error');
+          return;
+        }
+        UI.populateCardSelect();
+        document.getElementById('addStepChoice').classList.add('hidden');
+        document.getElementById('formNewTx').classList.remove('hidden');
+      });
+      document.querySelectorAll('[data-back]').forEach(function (btn) {
+        btn.addEventListener('click', Events.resetAddModal);
+      });
+
+      document.getElementById('formNewCard').addEventListener('submit', Events.handleNewCardSubmit);
+      document.getElementById('formNewTx').addEventListener('submit', Events.handleNewTxSubmit);
+    },
+
+    showFieldError: function (form, field, msg) {
+      var el = form.querySelector('.err-' + field);
+      if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+    },
+    clearFieldError: function (form, field) {
+      var el = form.querySelector('.err-' + field);
+      if (el) el.classList.add('hidden');
+    },
+
+    handleNewCardSubmit: function (e) {
+      e.preventDefault();
+      var form = e.target;
+      var fd = new FormData(form);
+      var bankName = (fd.get('bankName') || '').toString().trim();
+      var cardLabel = (fd.get('cardLabel') || '').toString().trim();
+      var limit = Calc.parseTurkishNumber(fd.get('limit'));
+      var statementDay = parseInt(fd.get('statementDay'), 10);
+      var dueDay = parseInt(fd.get('dueDay'), 10);
+      var minPaymentRate = parseFloat(fd.get('minPaymentRate'));
+      var color = fd.get('color') || '#6366F1';
+      var currentDebtInput = fd.get('currentDebt');
+      var currentDebt = currentDebtInput ? Calc.parseTurkishNumber(currentDebtInput) : 0;
+
+      var valid = true;
+      ['bankName', 'limit', 'statementDay', 'dueDay'].forEach(function (f) { Events.clearFieldError(form, f); });
+
+      if (!bankName) { Events.showFieldError(form, 'bankName', 'Banka adı gerekli.'); valid = false; }
+      if (isNaN(limit) || limit <= 0) { Events.showFieldError(form, 'limit', 'Geçerli bir limit girin.'); valid = false; }
+      if (isNaN(statementDay) || statementDay < 1 || statementDay > 31) { Events.showFieldError(form, 'statementDay', '1-31 arası bir gün girin.'); valid = false; }
+      if (isNaN(dueDay) || dueDay < 1 || dueDay > 31) { Events.showFieldError(form, 'dueDay', '1-31 arası bir gün girin.'); valid = false; }
+      if (!valid) return;
+
+      var card = {
+        id: Store.uuid(),
+        bankName: bankName,
+        cardLabel: cardLabel,
+        limit: limit,
+        currentDebt: 0,
+        statementDay: statementDay,
+        dueDay: dueDay,
+        minPaymentRate: isNaN(minPaymentRate) ? CONFIG.DEFAULT_MIN_PAYMENT_RATE : minPaymentRate,
+        color: color,
+        createdAt: new Date().toISOString()
+      };
+
+      Store.addCard(card);
+
+      if (!isNaN(currentDebt) && currentDebt > 0) {
+        Store.addTransaction({
+          id: Store.uuid(),
+          cardId: card.id,
+          type: 'expense',
+          amount: Math.round(currentDebt * 100) / 100,
+          description: 'Açılış bakiyesi',
+          date: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      document.getElementById('addModalBackdrop').classList.add('hidden');
+      Toast.show('Kart eklendi.', 'success');
+      UI.renderAll();
+    },
+
+    handleNewTxSubmit: function (e) {
+      e.preventDefault();
+      var form = e.target;
+      var fd = new FormData(form);
+      var cardId = fd.get('cardId');
+      var type = fd.get('type');
+      var amount = Calc.parseTurkishNumber(fd.get('amount'));
+      var description = (fd.get('description') || '').toString().trim();
+      var dateStr = fd.get('date');
+
+      Events.clearFieldError(form, 'amount');
+      if (isNaN(amount) || amount <= 0) {
+        Events.showFieldError(form, 'amount', 'Geçerli, pozitif bir tutar girin.');
+        return;
+      }
+
+      var data = Store.getData();
+      var card = data.cards.find(function (c) { return c.id === cardId; });
+      if (!card) { Toast.show('Kart bulunamadı.', 'error'); return; }
+
+      if (type === 'expense') {
+        var currentDebt = Calc.cardDebt(card.id, data.transactions);
+        if (currentDebt + amount > card.limit) {
+          Events.showFieldError(form, 'amount', 'Bu harcama kart limitini aşıyor (Kalan limit: ' + fmtCurrency.format(Math.max(card.limit - currentDebt, 0)) + ').');
+          return;
+        }
+      }
+
+      Store.addTransaction({
+        id: Store.uuid(),
+        cardId: cardId,
+        type: type,
+        amount: Math.round(amount * 100) / 100,
+        description: description,
+        date: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      });
+
+      document.getElementById('addModalBackdrop').classList.add('hidden');
+      Toast.show(type === 'expense' ? 'Harcama eklendi.' : 'Ödeme eklendi.', 'success');
+      UI.renderAll();
+    },
+
+    /* -------- Ayarlar / Yedekleme -------- */
+    bindSettings: function () {
+      var backdrop = document.getElementById('settingsBackdrop');
+      document.getElementById('btnSettings').addEventListener('click', function () {
+        document.getElementById('settingThreshold').value = Store.getData().settings.notificationThresholdDays;
+        backdrop.classList.remove('hidden');
+      });
+      document.getElementById('settingsClose').addEventListener('click', function () {
+        backdrop.classList.add('hidden');
+      });
+      backdrop.addEventListener('click', function (e) { if (e.target === this) this.classList.add('hidden'); });
+
+      document.getElementById('settingThreshold').addEventListener('change', function (e) {
+        var val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < 1) val = CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
+        Store.updateSettings({ notificationThresholdDays: val });
+        UI.renderNotifications();
+        Toast.show('Bildirim eşiği güncellendi.', 'success');
+      });
+
+      document.getElementById('btnExport').addEventListener('click', function () {
+        var data = Store.getData();
+        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        var today = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = 'kredi-karti-yedek-' + today + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        Toast.show('Yedek indirildi.', 'success');
+      });
+
+      document.getElementById('btnImport').addEventListener('click', function () {
+        document.getElementById('importFileInput').click();
+      });
+
+      document.getElementById('importFileInput').addEventListener('change', function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          var msgEl = document.getElementById('importMsg');
+          try {
+            var parsed = JSON.parse(evt.target.result);
+            if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.cards) || !Array.isArray(parsed.transactions) || !parsed.settings) {
+              throw new Error('Şema eksik');
+            }
+            Confirm.ask(
+              'Verileriniz değiştirilecek',
+              'Mevcut veriler silinecek ve yüklenen yedekle değiştirilecek. Devam edilsin mi?',
+              function () {
+                Store.replaceAll(parsed);
+                document.getElementById('settingsBackdrop').classList.add('hidden');
+                UI.renderAll();
+                Toast.show('Veriler başarıyla içe aktarıldı.', 'success');
+              }
+            );
+          } catch (err) {
+            msgEl.textContent = 'Geçersiz veya bozuk dosya. Lütfen geçerli bir yedek JSON dosyası seçin.';
+            msgEl.classList.remove('hidden');
+            msgEl.classList.add('text-red-500');
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      });
+
+      document.getElementById('btnResetAll').addEventListener('click', function () {
+        Confirm.ask(
+          'Tüm veriler silinsin mi?',
+          'Bu işlem tüm kartlarınızı ve işlem geçmişinizi kalıcı olarak silecek. Bu geri alınamaz.',
+          function () {
+            Confirm.ask(
+              'Son bir kez daha onaylayın',
+              'Emin misiniz? Tüm veriler kalıcı olarak silinecek.',
+              function () {
+                Store.resetAll();
+                document.getElementById('settingsBackdrop').classList.add('hidden');
+                UI.renderAll();
+                Toast.show('Tüm veriler sıfırlandı.', 'success');
+              }
+            );
+          }
+        );
+      });
+    }
+  };
+
+  /* =============================================================== */
+  /* init                                                               */
+  /* =============================================================== */
+  function init() {
+    Store.load();
+    Events.init();
+    UI.renderAll();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
