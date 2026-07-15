@@ -3,1400 +3,1439 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kredi Kartı & Borç Yönetim Paneli</title>
-
-<!-- ============================================================ -->
-<!-- Tema flash önleyici: html render olmadan class uygulanır      -->
-<!-- ============================================================ -->
+<title>KartPanel — Kredi Kartı ve Borç Yönetimi</title>
 <script>
+  // Tema flash önleme: render'dan önce tema class'ını uygula
   (function () {
     try {
-      var raw = localStorage.getItem('kkp_data');
-      var theme = null;
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        theme = parsed && parsed.settings && parsed.settings.theme;
-      }
-      if (!theme) {
-        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
+      var raw = localStorage.getItem('kartpanel_data');
+      var theme = raw ? (JSON.parse(raw).settings || {}).theme : null;
+      if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       if (theme === 'dark') document.documentElement.classList.add('dark');
-    } catch (e) {
-      // bozuk veri olsa bile sayfa render'ını engelleme
-    }
+    } catch (e) { /* bozuk veri: init'te ele alınır */ }
   })();
 </script>
-
-<!-- ============================================================ -->
-<!-- CDN Bağımlılıkları (sabit sürümler)                            -->
-<!-- ============================================================ -->
-<script src="https://cdn.tailwindcss.com/3.4.3"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/all.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
-
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     darkMode: 'class',
     theme: {
       extend: {
-        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
         colors: {
+          app: { light: '#F5F5F7', dark: '#0A0A0C' },
           surface: { light: '#FFFFFF', dark: '#1C1C1E' },
-          appbg: { light: '#F5F5F7', dark: '#0B0B0D' },
+          elev: { light: '#FAFAFC', dark: '#2C2C2E' },
+          ok: '#30D158', warn: '#FFD60A', danger: '#FF453A',
+          accent: '#0A84FF'
         },
-        fontFeatureSettings: { tnum: '"tnum" 1' }
+        boxShadow: {
+          card: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)',
+          cardDark: '0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5)',
+          pop: '0 12px 40px rgba(0,0,0,.18)'
+        },
+        borderRadius: { xl2: '1.25rem' }
       }
     }
   };
 </script>
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
-  :root { color-scheme: light; }
-  html.dark { color-scheme: dark; }
-
-  body {
-    font-family: 'Inter', system-ui, sans-serif;
-    background-color: #F5F5F7;
-    color: #1C1C1E;
-    transition: background-color 300ms ease-in-out, color 300ms ease-in-out;
-  }
-  html.dark body {
-    background-color: #0B0B0D;
-    color: #F5F5F7;
-  }
-
-  .tabular { font-variant-numeric: tabular-nums; }
-
-  .glass {
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-  }
-  .card-surface {
-    background-color: rgba(255,255,255,0.78);
-  }
-  html.dark .card-surface {
-    background-color: rgba(28,28,30,0.72);
-  }
-
-  .transition-smooth { transition: all 300ms ease-in-out; }
-
-  /* Scrollbar - takvim mobil kaydırma */
-  .scroll-thin::-webkit-scrollbar { height: 6px; width: 6px; }
-  .scroll-thin::-webkit-scrollbar-thumb { background: rgba(120,120,128,0.4); border-radius: 999px; }
-
-  /* Modal fade/scale */
-  .modal-enter { animation: modalIn 220ms ease-out; }
-  @keyframes modalIn {
-    from { opacity: 0; transform: scale(0.96) translateY(8px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
-  }
-  .backdrop-enter { animation: fadeIn 200ms ease-out; }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  progress-bar-fill { display:block; }
-
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-thumb { background: rgba(120,120,128,0.35); border-radius: 999px; }
-
-  [data-state-color="green"] { background-color: #34C759; }
-  [data-state-color="yellow"] { background-color: #FFC53D; }
-  [data-state-color="red"] { background-color: #FF453A; }
-
-  .focus-ring:focus-visible {
-    outline: 2px solid #6366F1;
-    outline-offset: 2px;
-  }
-
+  html { scroll-behavior: smooth; }
+  body { font-feature-settings: 'cv02','cv03','cv04','cv11'; }
+  .num { font-variant-numeric: tabular-nums; }
+  .glass { backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(128,128,128,.35); border-radius: 8px; }
+  .fade-in { animation: fadeIn .3s ease-out both; }
+  .scale-in { animation: scaleIn .25s cubic-bezier(.2,.9,.3,1.2) both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(.96);} to { opacity: 1; transform: scale(1);} }
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.001ms !important;
-      transition-duration: 0.001ms !important;
-    }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
+  .progress-fill { transition: width .6s cubic-bezier(.4,0,.2,1), background-color .3s; }
+  .modal-backdrop { background: rgba(0,0,0,.45); }
+  .dark .modal-backdrop { background: rgba(0,0,0,.65); }
+  input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+  .cal-dot { width: 7px; height: 7px; border-radius: 9999px; }
+  .toast-enter { animation: toastIn .35s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(.97);} to { opacity: 1; transform: none;} }
+  .bank-card { background: linear-gradient(135deg, var(--bc1), var(--bc2)); }
+  button, [role=button] { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid #0A84FF; outline-offset: 2px; border-radius: 6px; }
 </style>
 </head>
 
-<body class="min-h-screen bg-appbg-light dark:bg-appbg-dark">
+<body class="bg-app-light dark:bg-app-dark text-gray-900 dark:text-gray-100 font-sans min-h-screen transition-colors duration-300">
 
-<!-- ================================================================= -->
-<!-- ÜST BAR                                                            -->
-<!-- ================================================================= -->
-<header class="sticky top-0 z-30 border-b border-black/5 dark:border-white/5 glass card-surface">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-    <div class="flex items-center gap-2.5">
-      <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-600/30">
+<!-- ============ ÜST BAR ============ -->
+<header class="sticky top-0 z-40 glass bg-white/75 dark:bg-[#111114]/80 border-b border-black/5 dark:border-white/10">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-9 h-9 rounded-xl bg-accent text-white grid place-items-center shadow-card shrink-0">
         <i class="fa-solid fa-credit-card text-sm"></i>
       </div>
-      <div class="hidden sm:block">
-        <p class="font-bold text-[15px] leading-none">Borç Panelim</p>
-        <p class="text-[11px] text-black/40 dark:text-white/40 mt-1">Kredi kartı yönetimi</p>
+      <div class="min-w-0">
+        <h1 class="font-bold leading-tight truncate">KartPanel</h1>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-tight hidden sm:block">Kredi kartı &amp; borç yönetimi</p>
       </div>
     </div>
 
-    <nav class="flex items-center gap-1 sm:gap-2">
-      <button id="btnAdd" class="focus-ring transition-smooth flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 sm:px-4 h-10 rounded-full font-semibold text-sm shadow-sm shadow-indigo-600/30">
-        <i class="fa-solid fa-plus text-xs"></i>
-        <span class="hidden sm:inline">Ekle</span>
+    <nav class="flex items-center gap-1.5 sm:gap-2" aria-label="Ana menü">
+      <button data-view="dashboard" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium transition-colors" aria-label="Panel">
+        <i class="fa-solid fa-chart-pie sm:mr-1.5"></i><span class="hidden sm:inline">Panel</span>
+      </button>
+      <button data-view="calendar" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium transition-colors" aria-label="Takvim">
+        <i class="fa-solid fa-calendar-days sm:mr-1.5"></i><span class="hidden sm:inline">Takvim</span>
+      </button>
+      <button data-view="settings" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium transition-colors" aria-label="Ayarlar">
+        <i class="fa-solid fa-gear sm:mr-1.5"></i><span class="hidden sm:inline">Ayarlar</span>
       </button>
 
-      <button id="btnNotif" class="focus-ring transition-smooth relative w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-        <i class="fa-regular fa-bell text-[15px]"></i>
-        <span id="notifBadge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center tabular"></span>
+      <div class="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
+
+      <!-- Bildirim çanı -->
+      <div class="relative">
+        <button id="bellBtn" class="relative w-10 h-10 rounded-lg grid place-items-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors" aria-label="Bildirimler">
+          <i class="fa-regular fa-bell"></i>
+          <span id="bellBadge" class="hidden absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-danger text-white text-[10px] font-bold grid place-items-center num"></span>
+        </button>
+        <div id="bellPanel" class="hidden absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl bg-surface-light dark:bg-surface-dark shadow-pop border border-black/5 dark:border-white/10 overflow-hidden scale-in origin-top-right">
+          <div class="px-4 py-3 border-b border-black/5 dark:border-white/10 font-semibold text-sm">Bildirimler</div>
+          <div id="bellList" class="max-h-80 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <!-- Tema -->
+      <button id="themeBtn" class="w-10 h-10 rounded-lg grid place-items-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors" aria-label="Tema değiştir">
+        <i class="fa-solid fa-moon dark:hidden"></i>
+        <i class="fa-solid fa-sun hidden dark:inline"></i>
       </button>
 
-      <button id="btnTheme" class="focus-ring transition-smooth w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-        <i class="fa-solid fa-moon dark:hidden text-[15px]"></i>
-        <i class="fa-solid fa-sun hidden dark:inline text-[15px]"></i>
-      </button>
-
-      <button id="btnSettings" class="focus-ring transition-smooth w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-        <i class="fa-solid fa-gear text-[15px]"></i>
-      </button>
+      <!-- + Ekle -->
+      <div class="relative">
+        <button id="addBtn" class="h-10 px-3 sm:px-4 rounded-lg bg-accent hover:bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5 shadow-card transition-colors" aria-label="Ekle">
+          <i class="fa-solid fa-plus"></i><span class="hidden sm:inline">Ekle</span>
+        </button>
+        <div id="addMenu" class="hidden absolute right-0 mt-2 w-56 rounded-2xl bg-surface-light dark:bg-surface-dark shadow-pop border border-black/5 dark:border-white/10 overflow-hidden scale-in origin-top-right">
+          <button id="menuNewCard" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left">
+            <i class="fa-solid fa-credit-card text-accent w-4"></i> Yeni kart ekle
+          </button>
+          <button id="menuNewTx" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left border-t border-black/5 dark:border-white/10">
+            <i class="fa-solid fa-arrow-right-arrow-left text-ok w-4"></i> Harcama / ödeme ekle
+          </button>
+        </div>
+      </div>
     </nav>
-  </div>
-
-  <!-- Bildirim paneli -->
-  <div id="notifPanel" class="hidden absolute right-4 sm:right-6 top-16 w-[calc(100%-2rem)] sm:w-96 max-h-[70vh] overflow-y-auto rounded-2xl border border-black/5 dark:border-white/10 shadow-xl card-surface glass modal-enter">
-    <div class="p-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
-      <p class="font-semibold text-sm">Bildirimler</p>
-      <button id="notifClose" class="focus-ring w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark text-xs"></i></button>
-    </div>
-    <div id="notifList" class="p-2"></div>
   </div>
 </header>
 
-<!-- ================================================================= -->
-<!-- ANA İÇERİK                                                         -->
-<!-- ================================================================= -->
-<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
 
-  <!-- Boş durum -->
-  <section id="emptyState" class="hidden flex-col items-center text-center py-20 px-6 rounded-3xl border border-dashed border-black/10 dark:border-white/15">
-    <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center text-2xl mb-4">
-      <i class="fa-solid fa-wallet"></i>
+  <!-- ============ PANEL GÖRÜNÜMÜ ============ -->
+  <section id="view-dashboard" class="view space-y-6">
+    <!-- Boş durum -->
+    <div id="emptyState" class="hidden fade-in text-center py-20">
+      <div class="w-20 h-20 mx-auto rounded-3xl bg-accent/10 text-accent grid place-items-center mb-5">
+        <i class="fa-solid fa-credit-card text-3xl"></i>
+      </div>
+      <h2 class="text-xl font-bold mb-2">Henüz kart eklenmedi</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">İlk kredi kartınızı ekleyin; borçlarınız, ödeme tarihleriniz ve limit kullanımınız tek ekranda toplansın.</p>
+      <button id="emptyAddBtn" class="h-11 px-6 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold shadow-card transition-colors">
+        <i class="fa-solid fa-plus mr-2"></i>İlk kartını ekle
+      </button>
     </div>
-    <h2 class="text-lg font-bold">Henüz bir kartınız yok</h2>
-    <p class="text-sm text-black/50 dark:text-white/50 mt-1 max-w-xs">Borçlarınızı takip etmeye başlamak için ilk kredi kartınızı ekleyin.</p>
-    <button id="btnAddEmpty" class="focus-ring transition-smooth mt-5 bg-indigo-600 hover:bg-indigo-500 text-white px-5 h-11 rounded-full font-semibold text-sm">
-      <i class="fa-solid fa-plus mr-2 text-xs"></i>İlk kartınızı ekleyin
-    </button>
+
+    <div id="dashContent" class="space-y-6">
+      <!-- Donut + widget'lar -->
+      <div class="grid lg:grid-cols-5 gap-4 sm:gap-6">
+        <div class="lg:col-span-3 rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold">Genel durum</h2>
+            <span id="usageBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full num"></span>
+          </div>
+          <div class="relative h-64 sm:h-72">
+            <canvas id="donutChart" aria-label="Limit kullanım grafiği" role="img"></canvas>
+            <div class="absolute inset-0 grid place-items-center pointer-events-none">
+              <div class="text-center">
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Toplam borç</p>
+                <p id="donutCenter" class="text-4xl sm:text-5xl font-extrabold num tracking-tight"></p>
+                <p id="donutSub" class="text-xs text-gray-500 dark:text-gray-400 mt-1 num"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 grid grid-rows-3 gap-4 sm:gap-6">
+          <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 flex items-center gap-4 fade-in">
+            <div class="w-11 h-11 rounded-xl bg-danger/10 text-danger grid place-items-center shrink-0"><i class="fa-solid fa-hourglass-half"></i></div>
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Yaklaşan ödemeler (7 gün)</p>
+              <p id="wUpcoming" class="text-lg font-bold num truncate"></p>
+              <p id="wUpcomingSub" class="text-xs text-gray-500 dark:text-gray-400 truncate"></p>
+            </div>
+          </div>
+          <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 flex items-center gap-4 fade-in">
+            <div class="w-11 h-11 rounded-xl bg-warn/15 text-yellow-600 dark:text-warn grid place-items-center shrink-0"><i class="fa-solid fa-coins"></i></div>
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Toplam asgari ödeme</p>
+              <p id="wMinPay" class="text-lg font-bold num truncate"></p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Tüm kartların asgari toplamı</p>
+            </div>
+          </div>
+          <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 flex items-center gap-4 fade-in">
+            <div class="w-11 h-11 rounded-xl bg-accent/10 text-accent grid place-items-center shrink-0"><i class="fa-solid fa-gauge-high"></i></div>
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Limit kullanım oranı</p>
+              <p id="wUsage" class="text-lg font-bold num truncate"></p>
+              <div class="h-1.5 mt-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+                <div id="wUsageBar" class="progress-fill h-full rounded-full" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Borç seyri -->
+      <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+        <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <div>
+            <h2 class="font-semibold">Borç seyri</h2>
+            <p id="trendSub" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
+          </div>
+          <div class="flex items-center gap-1 bg-black/5 dark:bg-white/10 rounded-lg p-1" role="group" aria-label="Zaman aralığı">
+            <button data-range="30" class="range-btn px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">30 gün</button>
+            <button data-range="90" class="range-btn px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">90 gün</button>
+            <button data-range="0" class="range-btn px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">Tümü</button>
+          </div>
+        </div>
+        <div class="h-56 sm:h-64">
+          <canvas id="trendChart" aria-label="Borç seyri grafiği" role="img"></canvas>
+        </div>
+      </div>
+
+      <!-- Kart grid -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Kartlarım</h2>
+          <span id="cardCount" class="text-xs text-gray-500 dark:text-gray-400 num"></span>
+        </div>
+        <div id="cardsGrid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"></div>
+      </div>
+
+      <!-- Son işlemler -->
+      <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark overflow-hidden fade-in">
+        <div class="px-5 py-4 border-b border-black/5 dark:border-white/10 font-semibold">Son işlemler</div>
+        <div id="txList"></div>
+      </div>
+    </div>
   </section>
 
-  <div id="dashboardContent" class="space-y-6">
-    <!-- ÜST GRID: Donut + Widgetlar -->
-    <section class="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <!-- Donut chart kartı -->
-      <div class="lg:col-span-2 rounded-3xl p-6 card-surface glass border border-black/5 dark:border-white/5 flex flex-col items-center justify-center relative">
-        <p class="text-sm font-semibold text-black/50 dark:text-white/50 self-start mb-2">Genel Durum</p>
-        <div class="relative w-full max-w-[220px]">
-          <canvas id="mainDonut" width="220" height="220"></canvas>
-          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Borç</p>
-            <p id="donutCenterAmount" class="text-2xl sm:text-3xl font-extrabold tabular leading-tight">₺0</p>
-            <p id="donutCenterPct" class="text-[11px] text-black/40 dark:text-white/40 mt-0.5">%0 kullanım</p>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3 w-full mt-5 text-center">
-          <div>
-            <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Limit</p>
-            <p id="statTotalLimit" class="font-bold tabular text-sm">₺0</p>
-          </div>
-          <div>
-            <p class="text-[11px] text-black/40 dark:text-white/40">Kalan Limit</p>
-            <p id="statRemainingLimit" class="font-bold tabular text-sm">₺0</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Widgetlar -->
-      <div class="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
-          <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-3"><i class="fa-solid fa-clock text-sm"></i></div>
-          <p class="text-[11px] text-black/40 dark:text-white/40">Yaklaşan Ödemeler (7 gün)</p>
-          <p id="widgetUpcomingCount" class="text-2xl font-extrabold tabular mt-1">0</p>
-          <p id="widgetUpcomingSub" class="text-[11px] text-black/40 dark:text-white/40 mt-1">kart</p>
-        </div>
-        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
-          <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center mb-3"><i class="fa-solid fa-sack-dollar text-sm"></i></div>
-          <p class="text-[11px] text-black/40 dark:text-white/40">Toplam Asgari Ödeme</p>
-          <p id="widgetMinPayment" class="text-2xl font-extrabold tabular mt-1">₺0</p>
-        </div>
-        <div class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
-          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-3"><i class="fa-solid fa-gauge text-sm"></i></div>
-          <p class="text-[11px] text-black/40 dark:text-white/40">Aylık Kullanım Oranı</p>
-          <p id="widgetUsageRate" class="text-2xl font-extrabold tabular mt-1">%0</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- KART GRID -->
-    <section>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="font-bold text-[15px]">Kartlarım</h2>
-        <span id="cardCountLabel" class="text-xs text-black/40 dark:text-white/40"></span>
-      </div>
-      <div id="cardGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-    </section>
-
-    <!-- TAKVİM -->
-    <section class="rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5">
+  <!-- ============ TAKVİM GÖRÜNÜMÜ ============ -->
+  <section id="view-calendar" class="view hidden space-y-4">
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-4 sm:p-6 fade-in">
       <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-3">
-          <button id="calPrev" class="focus-ring transition-smooth w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-chevron-left text-xs"></i></button>
-          <h3 id="calTitle" class="font-bold text-[15px] w-32 text-center tabular"></h3>
-          <button id="calNext" class="focus-ring transition-smooth w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-chevron-right text-xs"></i></button>
-        </div>
-        <div class="flex items-center gap-3 text-[11px] text-black/40 dark:text-white/40">
-          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Kesim</span>
-          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Son ödeme</span>
-        </div>
+        <button id="calPrev" class="w-9 h-9 rounded-lg grid place-items-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors" aria-label="Önceki ay"><i class="fa-solid fa-chevron-left text-sm"></i></button>
+        <h2 id="calTitle" class="font-bold text-lg"></h2>
+        <button id="calNext" class="w-9 h-9 rounded-lg grid place-items-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors" aria-label="Sonraki ay"><i class="fa-solid fa-chevron-right text-sm"></i></button>
       </div>
-      <div class="overflow-x-auto scroll-thin">
-        <div id="calWeekdays" class="grid grid-cols-7 min-w-[560px] text-center text-[11px] font-semibold text-black/40 dark:text-white/40 mb-2"></div>
-        <div id="calGrid" class="grid grid-cols-7 min-w-[560px] gap-1"></div>
+      <div class="grid grid-cols-7 text-center text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+        <div>Pzt</div><div>Sal</div><div>Çar</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
       </div>
-    </section>
-  </div>
+      <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
+      <div class="flex items-center gap-5 mt-4 text-xs text-gray-500 dark:text-gray-400">
+        <span class="flex items-center gap-1.5"><span class="cal-dot bg-warn"></span> Hesap kesim</span>
+        <span class="flex items-center gap-1.5"><span class="cal-dot bg-danger"></span> Son ödeme</span>
+      </div>
+    </div>
+    <div id="calDetail" class="hidden rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 fade-in"></div>
+  </section>
+
+  <!-- ============ AYARLAR GÖRÜNÜMÜ ============ -->
+  <section id="view-settings" class="view hidden max-w-2xl mx-auto space-y-4">
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <h2 class="font-bold mb-1">Veri yedekleme</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Tüm verileriniz yalnızca bu tarayıcıda saklanır. Tarayıcı verilerini temizlemeden önce yedek almanız önerilir.</p>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="exportBtn" class="flex-1 h-11 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold text-sm transition-colors">
+          <i class="fa-solid fa-download mr-2"></i>JSON olarak dışa aktar
+        </button>
+        <button id="importBtn" class="flex-1 h-11 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 font-semibold text-sm transition-colors">
+          <i class="fa-solid fa-upload mr-2"></i>Yedekten içe aktar
+        </button>
+        <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+      </div>
+      <p id="lastBackup" class="text-xs text-gray-400 dark:text-gray-500 mt-3"></p>
+    </div>
+
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <h2 class="font-bold mb-1">Bildirim ayarı</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Son ödeme tarihine kaç gün kala uyarı almak istersiniz?</p>
+      <div class="flex items-center gap-3">
+        <input id="thresholdInput" type="number" min="1" max="15" class="w-24 h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 focus:ring-2 focus:ring-accent num font-semibold">
+        <span class="text-sm text-gray-500 dark:text-gray-400">gün önce</span>
+        <button id="thresholdSave" class="ml-auto h-10 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors">Kaydet</button>
+      </div>
+    </div>
+
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in border border-danger/20">
+      <h2 class="font-bold mb-1 text-danger">Tehlikeli bölge</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Tüm kartlar, işlemler ve ayarlar kalıcı olarak silinir. Bu işlem geri alınamaz.</p>
+      <button id="resetBtn" class="h-11 px-5 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger font-semibold text-sm transition-colors">
+        <i class="fa-solid fa-trash-can mr-2"></i>Tüm verileri sıfırla
+      </button>
+    </div>
+  </section>
 </main>
 
-<!-- ================================================================= -->
-<!-- GÜN DETAY POPOVER                                                  -->
-<!-- ================================================================= -->
-<div id="dayPopoverBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
-  <div id="dayPopover" class="modal-enter w-full sm:w-96 rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
-    <div class="flex items-center justify-between mb-3">
-      <h3 id="dayPopoverTitle" class="font-bold text-[15px]"></h3>
-      <button id="dayPopoverClose" class="focus-ring w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark text-xs"></i></button>
-    </div>
-    <div id="dayPopoverList" class="space-y-2"></div>
-  </div>
+<!-- ============ MODAL ============ -->
+<div id="modal" class="hidden fixed inset-0 z-50 grid place-items-center p-4 modal-backdrop">
+  <div id="modalBox" class="w-full max-w-md rounded-2xl bg-surface-light dark:bg-surface-dark shadow-pop scale-in max-h-[90vh] overflow-y-auto"></div>
 </div>
 
-<!-- ================================================================= -->
-<!-- EKLEME MODALI (Seçim ekranı + formlar)                             -->
-<!-- ================================================================= -->
-<div id="addModalBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
-  <div class="modal-enter w-full sm:w-[440px] rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl overflow-hidden">
-
-    <!-- Seçim ekranı -->
-    <div id="addStepChoice" class="p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h3 class="font-bold text-lg">Ne eklemek istersin?</h3>
-        <button id="addModalClose1" class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <button id="choiceNewCard" class="focus-ring transition-smooth text-left p-4 rounded-2xl border border-black/10 dark:border-white/10 hover:border-indigo-500 hover:bg-indigo-500/5">
-          <div class="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center mb-3"><i class="fa-solid fa-credit-card"></i></div>
-          <p class="font-semibold text-sm">Yeni Kart</p>
-          <p class="text-xs text-black/40 dark:text-white/40 mt-0.5">Kredi kartı ekle</p>
-        </button>
-        <button id="choiceNewTx" class="focus-ring transition-smooth text-left p-4 rounded-2xl border border-black/10 dark:border-white/10 hover:border-indigo-500 hover:bg-indigo-500/5">
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-3"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
-          <p class="font-semibold text-sm">Harcama / Ödeme</p>
-          <p class="text-xs text-black/40 dark:text-white/40 mt-0.5">İşlem ekle</p>
-        </button>
-      </div>
-    </div>
-
-    <!-- Yeni Kart formu -->
-    <form id="formNewCard" class="hidden p-6 space-y-3.5 max-h-[85vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-1">
-        <button type="button" data-back class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-arrow-left text-sm"></i></button>
-        <h3 class="font-bold text-base">Yeni Kart</h3>
-        <button type="button" class="add-modal-close focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Banka Adı</label>
-        <input name="bankName" type="text" required placeholder="Örn. Garanti BBVA" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
-        <p class="err-bankName hidden text-xs text-red-500 mt-1"></p>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Kart Etiketi (opsiyonel)</label>
-        <input name="cardLabel" type="text" placeholder="Örn. Bonus Card" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Limit (₺)</label>
-          <input name="limit" type="text" inputmode="decimal" required placeholder="50.000" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-          <p class="err-limit hidden text-xs text-red-500 mt-1"></p>
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Renk</label>
-          <input name="color" type="color" value="#6366F1" class="focus-ring w-full mt-1 h-11 rounded-xl border border-black/10 dark:border-white/10 bg-transparent cursor-pointer">
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Hesap Kesim Günü</label>
-          <input name="statementDay" type="number" min="1" max="31" required placeholder="15" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-          <p class="err-statementDay hidden text-xs text-red-500 mt-1"></p>
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-black/50 dark:text-white/50">Son Ödeme Günü</label>
-          <input name="dueDay" type="number" min="1" max="31" required placeholder="5" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-          <p class="err-dueDay hidden text-xs text-red-500 mt-1"></p>
-        </div>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Asgari Ödeme Oranı</label>
-        <select name="minPaymentRate" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
-          <option value="0.20" selected>%20</option>
-          <option value="0.40">%40</option>
-        </select>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Mevcut Borç (opsiyonel)</label>
-        <input name="currentDebt" type="text" inputmode="decimal" placeholder="0" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-      </div>
-      <button type="submit" class="focus-ring transition-smooth w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm mt-2">Kartı Kaydet</button>
-    </form>
-
-    <!-- Harcama/Ödeme formu -->
-    <form id="formNewTx" class="hidden p-6 space-y-3.5 max-h-[85vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-1">
-        <button type="button" data-back class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-arrow-left text-sm"></i></button>
-        <h3 class="font-bold text-base">Harcama / Ödeme</h3>
-        <button type="button" class="add-modal-close focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Kart</label>
-        <select name="cardId" required class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm"></select>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tür</label>
-        <div class="grid grid-cols-2 gap-2 mt-1">
-          <label class="focus-ring transition-smooth flex items-center justify-center gap-2 h-11 rounded-xl border border-black/10 dark:border-white/10 text-sm cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-500/5">
-            <input type="radio" name="type" value="expense" checked class="accent-red-500"><span>Harcama</span>
-          </label>
-          <label class="focus-ring transition-smooth flex items-center justify-center gap-2 h-11 rounded-xl border border-black/10 dark:border-white/10 text-sm cursor-pointer has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
-            <input type="radio" name="type" value="payment" class="accent-emerald-500"><span>Ödeme</span>
-          </label>
-        </div>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tutar (₺)</label>
-        <input name="amount" type="text" inputmode="decimal" required placeholder="350,50" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-        <p class="err-amount hidden text-xs text-red-500 mt-1"></p>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Açıklama</label>
-        <input name="description" type="text" placeholder="Örn. Market alışverişi" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm">
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-black/50 dark:text-white/50">Tarih</label>
-        <input name="date" type="date" required class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-      </div>
-      <button type="submit" class="focus-ring transition-smooth w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm mt-2">İşlemi Kaydet</button>
-    </form>
-  </div>
-</div>
-
-<!-- ================================================================= -->
-<!-- AYARLAR MODALI                                                     -->
-<!-- ================================================================= -->
-<div id="settingsBackdrop" class="hidden fixed inset-0 z-40 bg-black/30 backdrop-enter flex items-end sm:items-center justify-center p-4">
-  <div class="modal-enter w-full sm:w-[420px] rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
-    <div class="flex items-center justify-between">
-      <h3 class="font-bold text-lg">Ayarlar & Veri Yedekleme</h3>
-      <button id="settingsClose" class="focus-ring w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-
-    <div>
-      <label class="text-xs font-semibold text-black/50 dark:text-white/50">Bildirim Eşiği (gün)</label>
-      <input id="settingThreshold" type="number" min="1" max="30" class="focus-ring transition-smooth w-full mt-1 h-11 px-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 text-sm tabular">
-    </div>
-
-    <div class="space-y-2 pt-2 border-t border-black/5 dark:border-white/10">
-      <button id="btnExport" class="focus-ring transition-smooth w-full h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-black/5 dark:hover:bg-white/10">
-        <i class="fa-solid fa-download text-xs"></i>JSON olarak Dışa Aktar
-      </button>
-      <button id="btnImport" class="focus-ring transition-smooth w-full h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-black/5 dark:hover:bg-white/10">
-        <i class="fa-solid fa-upload text-xs"></i>İçe Aktar
-      </button>
-      <input id="importFileInput" type="file" accept="application/json" class="hidden">
-      <p id="importMsg" class="hidden text-xs mt-1"></p>
-    </div>
-
-    <div class="pt-2 border-t border-black/5 dark:border-white/10">
-      <button id="btnResetAll" class="focus-ring transition-smooth w-full h-11 rounded-xl bg-red-500/10 text-red-500 font-semibold text-sm hover:bg-red-500/20">
-        <i class="fa-solid fa-trash text-xs mr-2"></i>Tüm Verileri Sıfırla
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Onay / bilgi toast -->
-<div id="toastHost" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 space-y-2 w-[calc(100%-2rem)] max-w-sm"></div>
-
-<!-- Genel onay diyaloğu -->
-<div id="confirmBackdrop" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-enter flex items-center justify-center p-4">
-  <div class="modal-enter w-full sm:w-96 rounded-3xl card-surface glass border border-black/5 dark:border-white/10 shadow-2xl p-6">
-    <p id="confirmTitle" class="font-bold text-base mb-1.5"></p>
-    <p id="confirmMsg" class="text-sm text-black/60 dark:text-white/60 mb-5"></p>
-    <div class="flex gap-2">
-      <button id="confirmCancel" class="focus-ring transition-smooth flex-1 h-11 rounded-xl border border-black/10 dark:border-white/10 font-semibold text-sm hover:bg-black/5 dark:hover:bg-white/10">Vazgeç</button>
-      <button id="confirmOk" class="focus-ring transition-smooth flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm">Onayla</button>
-    </div>
-  </div>
-</div>
+<!-- ============ TOAST ============ -->
+<div id="toastWrap" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] space-y-2 w-[calc(100vw-2rem)] max-w-sm"></div>
 
 <script>
-(function () {
-  'use strict';
+'use strict';
 
-  /* =============================================================== */
-  /* CONFIG — tüm sabitler tek yerde                                   */
-  /* =============================================================== */
-  var CONFIG = {
-    STORAGE_KEY: 'kkp_data',
-    USAGE_THRESHOLDS: { yellow: 0.50, red: 0.80 }, // %50-80 sarı, >%80 kırmızı
-    STATE_COLORS: { green: '#34C759', yellow: '#FFC53D', red: '#FF453A' },
-    DEFAULT_NOTIF_THRESHOLD_DAYS: 5,
-    DEFAULT_MIN_PAYMENT_RATE: 0.20,
-    CURRENCY: 'TRY',
-    LOCALE: 'tr-TR',
-    WEEKDAYS_MON_FIRST: ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'],
-    MONTH_NAMES: ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'],
-    BANK_ICON_MAP: {
-      'garanti': 'fa-solid fa-building-columns',
-      'is bankasi': 'fa-solid fa-building-columns',
-      'işbank': 'fa-solid fa-building-columns',
-      'akbank': 'fa-solid fa-building-columns',
-      'yapi kredi': 'fa-solid fa-building-columns',
-      'yapı kredi': 'fa-solid fa-building-columns',
-      'ziraat': 'fa-solid fa-building-columns',
-      'halkbank': 'fa-solid fa-building-columns',
-      'qnb': 'fa-solid fa-building-columns',
-      'denizbank': 'fa-solid fa-building-columns',
-      'teb': 'fa-solid fa-building-columns',
-      'enpara': 'fa-solid fa-mobile-screen'
-    },
-    DEFAULT_BANK_ICON: 'fa-solid fa-credit-card'
-  };
+/* ==================== CONFIG ==================== */
+const CONFIG = {
+  storageKey: 'kartpanel_data',
+  usageThresholds: { warn: 0.5, danger: 0.8 },
+  statusColors: { ok: '#30D158', warn: '#FFD60A', danger: '#FF453A' },
+  accent: '#0A84FF',
+  defaultThresholdDays: 5,
+  minPaymentRates: [0.20, 0.40],
+  cardGradients: [
+    ['#1e3a8a', '#3b82f6'], ['#111827', '#4b5563'], ['#7c2d12', '#ea580c'],
+    ['#14532d', '#22c55e'], ['#581c87', '#a855f7'], ['#831843', '#ec4899'],
+    ['#0c4a6e', '#06b6d4'], ['#3f2d0c', '#ca8a04']
+  ],
+  banks: [
+    'Ziraat Bankası', 'Türkiye İş Bankası', 'Garanti BBVA', 'Akbank', 'Yapı Kredi',
+    'Halkbank', 'VakıfBank', 'QNB', 'DenizBank', 'TEB', 'ING', 'Şekerbank',
+    'Kuveyt Türk', 'Albaraka Türk', 'Türkiye Finans', 'Vakıf Katılım', 'Ziraat Katılım',
+    'Emlak Katılım', 'Fibabanka', 'Odeabank', 'Anadolubank', 'Alternatif Bank',
+    'Burgan Bank', 'ICBC Turkey', 'HSBC', 'Enpara.com', 'Papara', 'CEPTETEB', 'Diğer'
+  ],
+  bankIcons: [
+    { match: ['garanti'], icon: 'fa-building-columns' },
+    { match: ['ziraat'], icon: 'fa-wheat-awn' },
+    { match: ['yapı', 'yapi'], icon: 'fa-building' },
+    { match: ['akbank'], icon: 'fa-landmark' },
+    { match: ['iş', 'is bank', 'işbank'], icon: 'fa-briefcase' },
+    { match: ['qnb', 'finans'], icon: 'fa-globe' },
+    { match: ['vakıf', 'vakif'], icon: 'fa-landmark-dome' },
+    { match: ['halk'], icon: 'fa-people-group' },
+    { match: ['deniz'], icon: 'fa-water' },
+    { match: ['enpara', 'papara', 'dijital'], icon: 'fa-mobile-screen' }
+  ],
+  monthNames: ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+};
 
-  var fmtCurrency = new Intl.NumberFormat(CONFIG.LOCALE, { style: 'currency', currency: CONFIG.CURRENCY, maximumFractionDigits: 0 });
-  var fmtCurrencyPrecise = new Intl.NumberFormat(CONFIG.LOCALE, { style: 'currency', currency: CONFIG.CURRENCY, maximumFractionDigits: 2 });
+const fmtTL = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 });
+const fmtTL0 = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
+const fmtDate = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtDateShort = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
 
-  /* =============================================================== */
-  /* Store — LocalStorage CRUD                                         */
-  /* =============================================================== */
-  var Store = {
-    _cache: null,
+/* ==================== STORE (LocalStorage CRUD) ==================== */
+const Store = {
+  data: null,
+  corrupt: false,
 
-    _defaultData: function () {
-      return {
-        cards: [],
-        transactions: [],
-        settings: {
-          theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-          currency: 'TRY',
-          notificationThresholdDays: CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS
-        }
-      };
-    },
+  defaults() {
+    return {
+      cards: [],
+      transactions: [],
+      settings: { theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light', currency: 'TRY', notificationThresholdDays: CONFIG.defaultThresholdDays, lastExport: null }
+    };
+  },
 
-    load: function () {
-      if (this._cache) return this._cache;
-      var raw = null;
-      try {
-        raw = localStorage.getItem(CONFIG.STORAGE_KEY);
-      } catch (e) {
-        Toast.show('Depolamaya erişilemedi. Tarayıcı ayarlarınızı kontrol edin.', 'error');
-        this._cache = this._defaultData();
-        return this._cache;
-      }
-      if (!raw) {
-        this._cache = this._defaultData();
-        return this._cache;
-      }
-      try {
-        var parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.cards) || !Array.isArray(parsed.transactions)) {
-          throw new Error('şema geçersiz');
-        }
-        if (!parsed.settings) parsed.settings = this._defaultData().settings;
-        if (typeof parsed.settings.notificationThresholdDays !== 'number') {
-          parsed.settings.notificationThresholdDays = CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
-        }
-        this._cache = parsed;
-      } catch (e) {
-        this._cache = this._defaultData();
-        DataRecovery.offer();
-      }
-      return this._cache;
-    },
-
-    save: function () {
-      try {
-        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(this._cache));
-        return true;
-      } catch (e) {
-        Toast.show('Depolama alanı dolu. Bazı verileri dışa aktarıp temizleyin.', 'error');
-        return false;
-      }
-    },
-
-    getData: function () { return this.load(); },
-
-    addCard: function (card) {
-      var data = this.load();
-      data.cards.push(card);
-      return this.save();
-    },
-
-    updateSettings: function (patch) {
-      var data = this.load();
-      Object.assign(data.settings, patch);
-      return this.save();
-    },
-
-    addTransaction: function (tx) {
-      var data = this.load();
-      data.transactions.push(tx);
-      return this.save();
-    },
-
-    replaceAll: function (newData) {
-      this._cache = newData;
-      return this.save();
-    },
-
-    resetAll: function () {
-      this._cache = this._defaultData();
-      return this.save();
-    },
-
-    uuid: function () {
-      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+  load() {
+    const raw = localStorage.getItem(CONFIG.storageKey);
+    if (!raw) { this.data = this.defaults(); return; }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') throw new Error('invalid');
+      this.data = Object.assign(this.defaults(), parsed);
+      this.data.settings = Object.assign(this.defaults().settings, parsed.settings || {});
+      if (!Array.isArray(this.data.cards)) this.data.cards = [];
+      if (!Array.isArray(this.data.transactions)) this.data.transactions = [];
+    } catch (e) {
+      this.corrupt = true;
+      this.data = this.defaults();
     }
-  };
+  },
 
-  /* =============================================================== */
-  /* Calc — tarih / borç hesaplamaları                                 */
-  /* =============================================================== */
-  var Calc = {
-    clampDayToMonth: function (year, monthIndex, day) {
-      var lastDay = new Date(year, monthIndex + 1, 0).getDate();
-      return Math.min(day, lastDay);
-    },
-
-    // Bugünden sonraki en yakın "day" gününü (ay/gün) hesaplar
-    nextOccurrence: function (day, fromDate) {
-      var now = fromDate || new Date();
-      now.setHours(0, 0, 0, 0);
-      var year = now.getFullYear();
-      var month = now.getMonth();
-      var candidateDay = this.clampDayToMonth(year, month, day);
-      var candidate = new Date(year, month, candidateDay);
-      if (candidate < now) {
-        month += 1;
-        if (month > 11) { month = 0; year += 1; }
-        candidateDay = this.clampDayToMonth(year, month, day);
-        candidate = new Date(year, month, candidateDay);
-      }
-      return candidate;
-    },
-
-    daysUntil: function (targetDate, fromDate) {
-      var now = fromDate || new Date();
-      now.setHours(0, 0, 0, 0);
-      var t = new Date(targetDate);
-      t.setHours(0, 0, 0, 0);
-      return Math.round((t - now) / 86400000);
-    },
-
-    cardDebt: function (cardId, transactions) {
-      var debt = 0;
-      transactions.forEach(function (tx) {
-        if (tx.cardId !== cardId) return;
-        if (tx.type === 'expense') debt += tx.amount;
-        else if (tx.type === 'payment') debt -= tx.amount;
-      });
-      if (debt < 0) debt = 0;
-      return Math.round(debt * 100) / 100;
-    },
-
-    usageState: function (ratio) {
-      if (ratio > CONFIG.USAGE_THRESHOLDS.red) return 'red';
-      if (ratio > CONFIG.USAGE_THRESHOLDS.yellow) return 'yellow';
-      return 'green';
-    },
-
-    minPaymentFor: function (card) {
-      var debt = this.cardDebt(card.id, Store.getData().transactions);
-      return Math.round(debt * card.minPaymentRate * 100) / 100;
-    },
-
-    parseTurkishNumber: function (str) {
-      if (typeof str !== 'string') return NaN;
-      var cleaned = str.trim().replace(/\./g, '').replace(',', '.');
-      // Eğer tek nokta varsa ve virgül yoksa (ör. "350.50" İngilizce girilmiş olabilir) — basit yaklaşım:
-      if (!/,/.test(str) && /\.\d{1,2}$/.test(str.trim()) && (str.match(/\./g) || []).length === 1) {
-        cleaned = str.trim();
-      }
-      return parseFloat(cleaned);
+  save() {
+    try {
+      localStorage.setItem(CONFIG.storageKey, JSON.stringify(this.data));
+      return true;
+    } catch (e) {
+      UI.toast('Depolama alanı dolu veya erişilemiyor. Verileriniz kaydedilemedi — yedek almayı deneyin.', 'danger');
+      return false;
     }
-  };
+  },
 
-  /* =============================================================== */
-  /* Toast                                                              */
-  /* =============================================================== */
-  var Toast = {
-    show: function (msg, kind) {
-      kind = kind || 'info';
-      var colors = {
-        info: 'bg-indigo-600',
-        error: 'bg-red-500',
-        success: 'bg-emerald-500'
-      };
-      var el = document.createElement('div');
-      el.className = 'transition-smooth ' + (colors[kind] || colors.info) + ' text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg opacity-0 translate-y-2';
-      el.textContent = msg;
-      document.getElementById('toastHost').appendChild(el);
-      requestAnimationFrame(function () {
-        el.classList.remove('opacity-0', 'translate-y-2');
-      });
-      setTimeout(function () {
-        el.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(function () { el.remove(); }, 300);
-      }, 3200);
-    }
-  };
+  uid() {
+    return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9));
+  },
 
-  /* =============================================================== */
-  /* Onay diyaloğu (alert() kullanılmıyor)                              */
-  /* =============================================================== */
-  var Confirm = {
-    ask: function (title, msg, onConfirm) {
-      var backdrop = document.getElementById('confirmBackdrop');
-      document.getElementById('confirmTitle').textContent = title;
-      document.getElementById('confirmMsg').textContent = msg;
-      backdrop.classList.remove('hidden');
-      var okBtn = document.getElementById('confirmOk');
-      var cancelBtn = document.getElementById('confirmCancel');
-      function cleanup() {
-        backdrop.classList.add('hidden');
-        okBtn.removeEventListener('click', okHandler);
-        cancelBtn.removeEventListener('click', cancelHandler);
+  addCard(card) {
+    card.id = this.uid();
+    card.createdAt = new Date().toISOString();
+    card.color = CONFIG.cardGradients[this.data.cards.length % CONFIG.cardGradients.length];
+    this.data.cards.push(card);
+    return this.save();
+  },
+
+  updateCard(id, patch) {
+    const c = this.data.cards.find(x => x.id === id);
+    if (!c) return false;
+    Object.assign(c, patch);
+    return this.save();
+  },
+
+  deleteCard(id) {
+    this.data.cards = this.data.cards.filter(c => c.id !== id);
+    this.data.transactions = this.data.transactions.filter(t => t.cardId !== id);
+    return this.save();
+  },
+
+  addTransaction(tx) {
+    const card = this.data.cards.find(c => c.id === tx.cardId);
+    if (!card) return false;
+    tx.id = this.uid();
+    tx.createdAt = new Date().toISOString();
+    this.data.transactions.push(tx);
+    if (tx.type === 'expense') card.currentDebt += tx.amount;
+    else {
+      card.currentDebt -= tx.amount;
+      if (card.currentDebt < 0) {
+        card.currentDebt = 0;
+        UI.toast('Ödeme tutarı borçtan büyüktü; borç ₺0 olarak güncellendi.', 'warn');
       }
-      function okHandler() { cleanup(); onConfirm(); }
-      function cancelHandler() { cleanup(); }
-      okBtn.addEventListener('click', okHandler);
-      cancelBtn.addEventListener('click', cancelHandler);
     }
-  };
+    card.currentDebt = Math.round(card.currentDebt * 100) / 100;
+    return this.save();
+  },
 
-  var DataRecovery = {
-    offer: function () {
-      Confirm.ask(
-        'Verileriniz okunamadı',
-        'Kayıtlı veriniz bozuk görünüyor. Sıfırdan başlamak için devam edin, ya da Ayarlar > İçe Aktar ile bir yedek yükleyin.',
-        function () { Toast.show('Yeni bir başlangıç yapıldı.', 'info'); }
-      );
+  reset() {
+    this.data = this.defaults();
+    return this.save();
+  }
+};
+
+/* ==================== CALC (Tarih & finans hesapları) ==================== */
+const Calc = {
+  today() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; },
+
+  // Ayın gün sayısını aşan günleri (29/30/31) ayın son gününe sabitler
+  clampDay(year, month, day) {
+    const last = new Date(year, month + 1, 0).getDate();
+    return Math.min(day, last);
+  },
+
+  // Verilen ay-günün bugünden itibaren bir sonraki gerçekleşme tarihi
+  nextOccurrence(dayOfMonth, from = this.today()) {
+    let y = from.getFullYear(), m = from.getMonth();
+    let d = new Date(y, m, this.clampDay(y, m, dayOfMonth));
+    if (d < from) {
+      m += 1; if (m > 11) { m = 0; y += 1; }
+      d = new Date(y, m, this.clampDay(y, m, dayOfMonth));
     }
-  };
+    return d;
+  },
 
-  /* =============================================================== */
-  /* Charts                                                             */
-  /* =============================================================== */
-  var Charts = {
-    donut: null,
+  daysUntil(date) {
+    return Math.round((date - this.today()) / 86400000);
+  },
 
-    renderDonut: function (totalLimit, totalDebt) {
-      var ctx = document.getElementById('mainDonut').getContext('2d');
-      var remaining = Math.max(totalLimit - totalDebt, 0);
-      var ratio = totalLimit > 0 ? totalDebt / totalLimit : 0;
-      var state = Calc.usageState(ratio);
-      var debtColor = CONFIG.STATE_COLORS[state];
+  minPayment(card) {
+    return Math.round(card.currentDebt * card.minPaymentRate * 100) / 100;
+  },
 
-      var data = totalLimit > 0
-        ? [totalDebt, remaining]
-        : [1];
-      var colors = totalLimit > 0
-        ? [debtColor, document.documentElement.classList.contains('dark') ? '#3A3A3C' : '#E5E5EA']
-        : [document.documentElement.classList.contains('dark') ? '#3A3A3C' : '#E5E5EA'];
+  usage(card) {
+    return card.limit > 0 ? card.currentDebt / card.limit : 0;
+  },
 
-      if (this.donut) {
-        this.donut.data.datasets[0].data = data;
-        this.donut.data.datasets[0].backgroundColor = colors;
-        this.donut.update();
-        return;
+  usageColor(ratio) {
+    if (ratio >= CONFIG.usageThresholds.danger) return CONFIG.statusColors.danger;
+    if (ratio >= CONFIG.usageThresholds.warn) return CONFIG.statusColors.warn;
+    return CONFIG.statusColors.ok;
+  },
+
+  totals() {
+    const cards = Store.data.cards;
+    const limit = cards.reduce((s, c) => s + c.limit, 0);
+    const debt = cards.reduce((s, c) => s + c.currentDebt, 0);
+    const minPay = cards.reduce((s, c) => s + this.minPayment(c), 0);
+    return { limit, debt, available: Math.max(limit - debt, 0), minPay, usage: limit > 0 ? debt / limit : 0 };
+  },
+
+  // Bildirim listesi: eşik içinde son ödemesi olan borçlu kartlar
+  notifications() {
+    const threshold = Store.data.settings.notificationThresholdDays;
+    return Store.data.cards
+      .filter(c => c.currentDebt > 0)
+      .map(c => {
+        const due = this.nextOccurrence(c.dueDay);
+        return { card: c, due, days: this.daysUntil(due) };
+      })
+      .filter(n => n.days <= threshold)
+      .sort((a, b) => a.days - b.days);
+  },
+
+  upcomingPayments(withinDays = 7) {
+    return Store.data.cards
+      .filter(c => c.currentDebt > 0)
+      .map(c => ({ card: c, due: this.nextOccurrence(c.dueDay), days: this.daysUntil(this.nextOccurrence(c.dueDay)) }))
+      .filter(n => n.days >= 0 && n.days <= withinDays)
+      .sort((a, b) => a.days - b.days);
+  },
+
+  // Toplam borcun günlük zaman serisi.
+  // Bugünkü borçtan geriye giderek işlemler ters uygulanır:
+  // debt(gün) = güncelBorç − Σ (o günden SONRAKİ işlemlerin etkisi)
+  // etki: harcama +tutar, ödeme −tutar
+  debtSeries(rangeDays) {
+    const today = this.today();
+    const totalNow = Store.data.cards.reduce((s, c) => s + c.currentDebt, 0);
+    const txs = Store.data.transactions;
+
+    // Başlangıç: aralık verildiyse o kadar gün, yoksa ilk işlemden (veya ilk karttan) bugüne
+    let start;
+    if (rangeDays > 0) {
+      start = new Date(today); start.setDate(start.getDate() - (rangeDays - 1));
+    } else {
+      const firstDates = [
+        ...txs.map(t => new Date(t.date)),
+        ...Store.data.cards.map(c => new Date(c.createdAt))
+      ].filter(d => !isNaN(d));
+      start = firstDates.length ? new Date(Math.min(...firstDates)) : new Date(today);
+      start.setHours(0, 0, 0, 0);
+    }
+    // En az 7 günlük pencere göster ki tek noktalı düz grafik olmasın
+    const minStart = new Date(today); minStart.setDate(minStart.getDate() - 6);
+    if (start > minStart) start = minStart;
+
+    const days = Math.round((today - start) / 86400000) + 1;
+    // Performans: gün sayısı çoksa örneklem aralığı büyüt (maks ~120 nokta)
+    const step = Math.max(1, Math.ceil(days / 120));
+
+    const labels = [], values = [];
+    for (let i = 0; i < days; i += step) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const endOfDay = new Date(d); endOfDay.setHours(23, 59, 59, 999);
+      const laterEffect = txs.reduce((s, t) => {
+        if (new Date(t.date) > endOfDay) return s + (t.type === 'expense' ? t.amount : -t.amount);
+        return s;
+      }, 0);
+      labels.push(d);
+      values.push(Math.max(0, Math.round((totalNow - laterEffect) * 100) / 100));
+    }
+    // Son nokta her zaman bugün olsun
+    if (labels.length && labels[labels.length - 1].getTime() !== today.getTime()) {
+      labels.push(new Date(today));
+      values.push(totalNow);
+    }
+    return { labels, values };
+  },
+
+  // Türkçe format ("1.250,50" veya "1250.50") tutarı sayıya çevirir
+  parseAmount(str) {
+    if (typeof str !== 'string') return NaN;
+    let s = str.trim().replace(/\s/g, '').replace(/₺/g, '');
+    if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (s.includes(',')) s = s.replace(',', '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? NaN : Math.round(n * 100) / 100;
+  },
+
+  bankIcon(name) {
+    const lower = (name || '').toLocaleLowerCase('tr-TR');
+    const found = CONFIG.bankIcons.find(b => b.match.some(m => lower.includes(m)));
+    return found ? found.icon : 'fa-credit-card';
+  }
+};
+
+/* ==================== CHARTS ==================== */
+const Charts = {
+  donut: null,
+  trend: null,
+  trendRange: 30,
+
+  renderTrend() {
+    const ctx = document.getElementById('trendChart');
+    if (!ctx) return;
+    const dark = document.documentElement.classList.contains('dark');
+    const { labels, values } = Calc.debtSeries(this.trendRange);
+
+    // Aralık butonlarını boyala
+    document.querySelectorAll('.range-btn').forEach(b => {
+      const on = parseInt(b.dataset.range, 10) === this.trendRange;
+      b.classList.toggle('bg-surface-light', on && !dark);
+      b.classList.toggle('dark:bg-surface-dark', on);
+      b.classList.toggle('shadow-card', on);
+      b.classList.toggle('text-accent', on);
+      b.classList.toggle('text-gray-500', !on);
+      b.classList.toggle('dark:text-gray-400', !on);
+    });
+
+    // Alt başlık: dönem değişimi
+    const sub = document.getElementById('trendSub');
+    if (values.length >= 2) {
+      const diff = values[values.length - 1] - values[0];
+      if (Math.abs(diff) < 0.01) sub.textContent = 'Bu dönemde borcunuz değişmedi.';
+      else sub.textContent = diff > 0
+        ? 'Bu dönemde borcunuz ' + fmtTL0.format(diff) + ' arttı.'
+        : 'Bu dönemde borcunuzu ' + fmtTL0.format(-diff) + ' azalttınız. 👏';
+      sub.classList.toggle('text-ok', diff < -0.01);
+      sub.classList.toggle('text-danger', diff > 0.01);
+    } else { sub.textContent = ''; }
+
+    const gridColor = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)';
+    const tickColor = dark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.45)';
+    const dispLabels = labels.map(d => fmtDateShort.format(d));
+
+    const dataset = {
+      data: values,
+      borderColor: CONFIG.accent,
+      borderWidth: 2.5,
+      pointRadius: values.length > 40 ? 0 : 3,
+      pointHoverRadius: 5,
+      pointBackgroundColor: CONFIG.accent,
+      tension: 0.35,
+      fill: true,
+      backgroundColor: c => {
+        const chart = c.chart;
+        if (!chart.chartArea) return 'rgba(10,132,255,.08)';
+        const g = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
+        g.addColorStop(0, 'rgba(10,132,255,.22)');
+        g.addColorStop(1, 'rgba(10,132,255,0)');
+        return g;
       }
+    };
 
-      this.donut = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Borç', 'Kalan Limit'],
-          datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
-        },
+    if (this.trend) {
+      this.trend.data.labels = dispLabels;
+      this.trend.data.datasets[0] = Object.assign(this.trend.data.datasets[0], dataset);
+      this.trend.options.scales.x.ticks.color = tickColor;
+      this.trend.options.scales.y.ticks.color = tickColor;
+      this.trend.options.scales.y.grid.color = gridColor;
+      this.trend.update();
+    } else {
+      this.trend = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dispLabels, datasets: [dataset] },
         options: {
-          cutout: '76%',
-          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 600, easing: 'easeOutQuart' },
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: {
-              enabled: totalLimit > 0,
-              callbacks: {
-                label: function (ctx) {
-                  return ctx.label + ': ' + ctx.parsed.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
-                }
-              }
+              callbacks: { label: c => ' Toplam borç: ' + fmtTL.format(c.parsed.y) },
+              backgroundColor: 'rgba(20,20,22,.92)', padding: 10, cornerRadius: 10,
+              titleFont: { family: 'Inter' }, bodyFont: { family: 'Inter', weight: '600' }
             }
           },
-          animation: { duration: 300 }
+          scales: {
+            x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8, font: { family: 'Inter', size: 11 } } },
+            y: {
+              beginAtZero: true,
+              grid: { color: gridColor },
+              ticks: { color: tickColor, font: { family: 'Inter', size: 11 }, callback: v => fmtTL0.format(v) }
+            }
+          }
         }
       });
     }
-  };
+  },
 
-  /* =============================================================== */
-  /* UI — render fonksiyonları                                         */
-  /* =============================================================== */
-  var UI = {
-    calState: { year: new Date().getFullYear(), month: new Date().getMonth() },
+  renderDonut() {
+    const t = Calc.totals();
+    const ctx = document.getElementById('donutChart');
+    if (!ctx) return;
+    const dark = document.documentElement.classList.contains('dark');
+    const debtColor = Calc.usageColor(t.usage);
+    const trackColor = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
 
-    renderAll: function () {
-      var data = Store.getData();
-      var hasCards = data.cards.length > 0;
-      document.getElementById('emptyState').classList.toggle('hidden', hasCards);
-      document.getElementById('emptyState').classList.toggle('flex', !hasCards);
-      document.getElementById('dashboardContent').classList.toggle('hidden', !hasCards);
+    const data = {
+      labels: ['Güncel borç', 'Kullanılabilir limit'],
+      datasets: [{
+        data: t.limit > 0 ? [t.debt, t.available] : [0, 1],
+        backgroundColor: [debtColor, trackColor],
+        borderWidth: 0,
+        borderRadius: t.debt > 0 && t.available > 0 ? 10 : 0,
+        spacing: t.debt > 0 && t.available > 0 ? 3 : 0
+      }]
+    };
 
-      this.renderStats();
-      this.renderCardGrid();
-      this.renderCalendar();
-      this.renderNotifications();
-    },
-
-    stateColorClasses: function (state) {
-      return { green: 'bg-emerald-500', yellow: 'bg-amber-400', red: 'bg-red-500' }[state];
-    },
-
-    renderStats: function () {
-      var data = Store.getData();
-      var totalLimit = 0, totalDebt = 0, totalMinPayment = 0;
-      var upcomingCardIds = new Set();
-
-      data.cards.forEach(function (card) {
-        var debt = Calc.cardDebt(card.id, data.transactions);
-        totalLimit += card.limit;
-        totalDebt += debt;
-        totalMinPayment += Math.round(debt * card.minPaymentRate * 100) / 100;
-
-        var nextDue = Calc.nextOccurrence(card.dueDay);
-        var days = Calc.daysUntil(nextDue);
-        if (days >= 0 && days <= 7) upcomingCardIds.add(card.id);
-      });
-
-      var ratio = totalLimit > 0 ? totalDebt / totalLimit : 0;
-
-      document.getElementById('donutCenterAmount').textContent = fmtCurrency.format(totalDebt);
-      document.getElementById('donutCenterPct').textContent = '%' + Math.round(ratio * 100) + ' kullanım';
-      document.getElementById('statTotalLimit').textContent = fmtCurrency.format(totalLimit);
-      document.getElementById('statRemainingLimit').textContent = fmtCurrency.format(Math.max(totalLimit - totalDebt, 0));
-
-      document.getElementById('widgetUpcomingCount').textContent = upcomingCardIds.size;
-      document.getElementById('widgetUpcomingSub').textContent = upcomingCardIds.size === 1 ? 'kart' : 'kart';
-      document.getElementById('widgetMinPayment').textContent = fmtCurrency.format(totalMinPayment);
-      document.getElementById('widgetUsageRate').textContent = '%' + Math.round(ratio * 100);
-
-      document.getElementById('cardCountLabel').textContent = data.cards.length + ' kart';
-
-      Charts.renderDonut(totalLimit, totalDebt);
-    },
-
-    matchBankIcon: function (bankName) {
-      var key = (bankName || '').toLowerCase().trim();
-      for (var k in CONFIG.BANK_ICON_MAP) {
-        if (key.indexOf(k) !== -1) return CONFIG.BANK_ICON_MAP[k];
-      }
-      return CONFIG.DEFAULT_BANK_ICON;
-    },
-
-    renderCardGrid: function () {
-      var data = Store.getData();
-      var grid = document.getElementById('cardGrid');
-      grid.innerHTML = '';
-
-      data.cards.forEach(function (card) {
-        var debt = Calc.cardDebt(card.id, data.transactions);
-        var ratio = card.limit > 0 ? debt / card.limit : 0;
-        var state = Calc.usageState(ratio);
-        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
-        var nextDue = Calc.nextOccurrence(card.dueDay);
-        var daysLeft = Calc.daysUntil(nextDue);
-        var isOverdue = daysLeft < 0;
-
-        var wrap = document.createElement('div');
-        wrap.className = 'transition-smooth rounded-3xl p-5 card-surface glass border border-black/5 dark:border-white/5 hover:shadow-md';
-
-        var iconClass = UI.matchBankIcon(card.bankName);
-        var barColorClass = UI.stateColorClasses(state);
-
-        var bankNameEl = document.createElement('span');
-        bankNameEl.textContent = card.bankName;
-        var labelEl = document.createElement('span');
-        labelEl.textContent = card.cardLabel || '';
-
-        wrap.innerHTML =
-          '<div class="flex items-start justify-between mb-4">' +
-            '<div class="flex items-center gap-3">' +
-              '<div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white text-sm shrink-0" style="background-color:' + escapeAttr(card.color || '#6366F1') + '">' +
-                '<i class="' + iconClass + '"></i>' +
-              '</div>' +
-              '<div class="min-w-0">' +
-                '<p class="font-bold text-sm truncate bank-name-slot"></p>' +
-                '<p class="text-xs text-black/40 dark:text-white/40 truncate label-slot"></p>' +
-              '</div>' +
-            '</div>' +
-            (isOverdue ? '<span class="shrink-0 text-[10px] font-bold px-2 py-1 rounded-full bg-red-600 text-white">GECİKTİ</span>' : '') +
-          '</div>' +
-          '<p class="text-2xl font-extrabold tabular mb-1">' + fmtCurrency.format(debt) + '</p>' +
-          '<p class="text-[11px] text-black/40 dark:text-white/40 mb-3">Limit: ' + fmtCurrency.format(card.limit) + '</p>' +
-          '<div class="h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden mb-3">' +
-            '<div class="h-full ' + barColorClass + ' transition-smooth" style="width:' + Math.min(ratio * 100, 100) + '%"></div>' +
-          '</div>' +
-          '<div class="grid grid-cols-2 gap-2 text-xs">' +
-            '<div class="rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-2.5">' +
-              '<p class="text-black/40 dark:text-white/40 text-[10px]">Asgari Ödeme</p>' +
-              '<p class="font-semibold tabular mt-0.5">' + fmtCurrency.format(minPay) + '</p>' +
-            '</div>' +
-            '<div class="rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-2.5">' +
-              '<p class="text-black/40 dark:text-white/40 text-[10px]">Son Ödemeye</p>' +
-              '<p class="font-semibold tabular mt-0.5">' + (isOverdue ? 'Geçti' : daysLeft + ' gün') + '</p>' +
-            '</div>' +
-          '</div>';
-
-        wrap.querySelector('.bank-name-slot').textContent = card.bankName;
-        wrap.querySelector('.label-slot').textContent = card.cardLabel || '';
-        grid.appendChild(wrap);
-      });
-    },
-
-    /* ---------------- Takvim ---------------- */
-    renderCalendar: function () {
-      var data = Store.getData();
-      var y = this.calState.year, m = this.calState.month;
-      document.getElementById('calTitle').textContent = CONFIG.MONTH_NAMES[m] + ' ' + y;
-
-      var wd = document.getElementById('calWeekdays');
-      wd.innerHTML = '';
-      CONFIG.WEEKDAYS_MON_FIRST.forEach(function (d) {
-        var s = document.createElement('div');
-        s.textContent = d;
-        wd.appendChild(s);
-      });
-
-      var grid = document.getElementById('calGrid');
-      grid.innerHTML = '';
-
-      var firstOfMonth = new Date(y, m, 1);
-      var startOffset = (firstOfMonth.getDay() + 6) % 7; // Pazartesi=0
-      var daysInMonth = new Date(y, m + 1, 0).getDate();
-      var today = new Date(); today.setHours(0,0,0,0);
-
-      // Ay içi kesim/ödeme günlerini eşle
-      var dayMarks = {}; // day -> {statement: [cardName...], due: [cardName...]}
-      for (var d = 1; d <= daysInMonth; d++) dayMarks[d] = { statement: [], due: [] };
-
-      data.cards.forEach(function (card) {
-        var sDay = Calc.clampDayToMonth(y, m, card.statementDay);
-        var dDay = Calc.clampDayToMonth(y, m, card.dueDay);
-        dayMarks[sDay].statement.push(card);
-        dayMarks[dDay].due.push(card);
-      });
-
-      for (var i = 0; i < startOffset; i++) {
-        var empty = document.createElement('div');
-        empty.className = 'h-16 sm:h-20';
-        grid.appendChild(empty);
-      }
-
-      for (var day = 1; day <= daysInMonth; day++) {
-        var cellDate = new Date(y, m, day);
-        var isToday = cellDate.getTime() === today.getTime();
-        var marks = dayMarks[day];
-
-        var cell = document.createElement('button');
-        cell.type = 'button';
-        cell.className = 'focus-ring transition-smooth h-16 sm:h-20 rounded-xl border text-left p-1.5 flex flex-col justify-between ' +
-          (isToday ? 'border-indigo-500 bg-indigo-500/5' : 'border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5');
-
-        var dotsHtml = '';
-        if (marks.statement.length) {
-          dotsHtml += '<span class="inline-flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>' +
-            (marks.statement.length > 1 ? '<span class="text-[9px] text-amber-500 font-bold">' + marks.statement.length + '</span>' : '') + '</span>';
+    if (this.donut) {
+      this.donut.data = data;
+      this.donut.update();
+    } else {
+      this.donut = new Chart(ctx, {
+        type: 'doughnut',
+        data,
+        options: {
+          cutout: '76%',
+          maintainAspectRatio: false,
+          animation: { duration: 700, easing: 'easeOutQuart' },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: c => ' ' + c.label + ': ' + fmtTL.format(c.parsed) },
+              backgroundColor: 'rgba(20,20,22,.92)', padding: 10, cornerRadius: 10,
+              titleFont: { family: 'Inter' }, bodyFont: { family: 'Inter', weight: '600' }
+            }
+          }
         }
-        if (marks.due.length) {
-          dotsHtml += '<span class="inline-flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>' +
-            (marks.due.length > 1 ? '<span class="text-[9px] text-red-500 font-bold">' + marks.due.length + '</span>' : '') + '</span>';
-        }
-
-        cell.innerHTML =
-          '<span class="text-xs font-semibold tabular">' + day + '</span>' +
-          '<div class="flex items-center gap-1.5">' + dotsHtml + '</div>';
-
-        cell.addEventListener('click', function (dayNum, marksForDay) {
-          return function () { UI.openDayPopover(dayNum, marksForDay); };
-        }(day, marks));
-
-        grid.appendChild(cell);
-      }
-    },
-
-    openDayPopover: function (day, marks) {
-      if (!marks.statement.length && !marks.due.length) return;
-      var y = this.calState.year, m = this.calState.month;
-      document.getElementById('dayPopoverTitle').textContent = day + ' ' + CONFIG.MONTH_NAMES[m] + ' ' + y;
-      var list = document.getElementById('dayPopoverList');
-      list.innerHTML = '';
-      var data = Store.getData();
-
-      marks.statement.forEach(function (card) {
-        var debt = Calc.cardDebt(card.id, data.transactions);
-        list.appendChild(UI.dayPopoverRow(card, 'Hesap Kesim Günü', debt, 'amber'));
-      });
-      marks.due.forEach(function (card) {
-        var debt = Calc.cardDebt(card.id, data.transactions);
-        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
-        list.appendChild(UI.dayPopoverRow(card, 'Son Ödeme Günü · Asgari ' + fmtCurrency.format(minPay), debt, 'red'));
-      });
-
-      document.getElementById('dayPopoverBackdrop').classList.remove('hidden');
-    },
-
-    dayPopoverRow: function (card, label, amount, dotColor) {
-      var row = document.createElement('div');
-      row.className = 'flex items-center justify-between p-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.05]';
-      var dotClass = dotColor === 'amber' ? 'bg-amber-400' : 'bg-red-500';
-      row.innerHTML =
-        '<div class="flex items-center gap-2.5 min-w-0">' +
-          '<span class="w-2 h-2 rounded-full ' + dotClass + ' shrink-0"></span>' +
-          '<div class="min-w-0">' +
-            '<p class="text-sm font-semibold truncate name-slot"></p>' +
-            '<p class="text-[11px] text-black/40 dark:text-white/40 truncate label-slot"></p>' +
-          '</div>' +
-        '</div>' +
-        '<p class="text-sm font-bold tabular shrink-0 ml-2">' + fmtCurrency.format(amount) + '</p>';
-      row.querySelector('.name-slot').textContent = card.bankName + (card.cardLabel ? ' · ' + card.cardLabel : '');
-      row.querySelector('.label-slot').textContent = label;
-      return row;
-    },
-
-    /* ---------------- Bildirimler ---------------- */
-    renderNotifications: function () {
-      var data = Store.getData();
-      var thresholdDays = data.settings.notificationThresholdDays || CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
-      var items = [];
-
-      data.cards.forEach(function (card) {
-        var nextDue = Calc.nextOccurrence(card.dueDay);
-        var days = Calc.daysUntil(nextDue);
-        var debt = Calc.cardDebt(card.id, data.transactions);
-        var minPay = Math.round(debt * card.minPaymentRate * 100) / 100;
-
-        // Gecikmiş olma durumu: gerçek geçmiş tarih bugünden önce VE borç > 0
-        var rawDue = new Date(card._year || nextDue.getFullYear(), nextDue.getMonth(), nextDue.getDate());
-        var isOverdue = false;
-        // Basit gecikme kontrolü: bu ayki ödeme günü geçmiş ve halihazırda borç varsa ve nextOccurrence zaten bir sonraki aya sarmışsa
-        var thisMonthDueDay = Calc.clampDayToMonth(new Date().getFullYear(), new Date().getMonth(), card.dueDay);
-        var thisMonthDue = new Date(new Date().getFullYear(), new Date().getMonth(), thisMonthDueDay);
-        var todayD = new Date(); todayD.setHours(0,0,0,0);
-        if (thisMonthDue < todayD && debt > 0) isOverdue = true;
-
-        if (isOverdue) {
-          items.push({ card: card, days: 0, debt: debt, minPay: minPay, overdue: true });
-        } else if (days >= 0 && days <= thresholdDays) {
-          items.push({ card: card, days: days, debt: debt, minPay: minPay, overdue: false });
-        }
-      });
-
-      var badge = document.getElementById('notifBadge');
-      var uniqueCount = items.length;
-      if (uniqueCount > 0) {
-        badge.textContent = uniqueCount > 99 ? '99+' : uniqueCount;
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-
-      var list = document.getElementById('notifList');
-      list.innerHTML = '';
-      if (items.length === 0) {
-        var empty = document.createElement('p');
-        empty.className = 'text-xs text-black/40 dark:text-white/40 text-center py-6';
-        empty.textContent = 'Yaklaşan bir ödeme yok.';
-        list.appendChild(empty);
-        return;
-      }
-
-      items.sort(function (a, b) { return (a.overdue === b.overdue) ? a.days - b.days : (a.overdue ? -1 : 1); });
-
-      items.forEach(function (it) {
-        var row = document.createElement('div');
-        row.className = 'flex items-start gap-3 p-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-smooth';
-        var iconBg = it.overdue ? 'bg-red-600' : 'bg-amber-400';
-        row.innerHTML =
-          '<div class="w-8 h-8 rounded-full ' + iconBg + ' text-white flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid ' + (it.overdue ? 'fa-triangle-exclamation' : 'fa-bell') + ' text-[11px]"></i></div>' +
-          '<div class="min-w-0 flex-1">' +
-            '<p class="text-sm font-semibold truncate title-slot"></p>' +
-            '<p class="text-xs text-black/50 dark:text-white/50 mt-0.5">Asgari: ' + fmtCurrency.format(it.minPay) + ' · Toplam: ' + fmtCurrency.format(it.debt) + '</p>' +
-            (it.overdue ? '<span class="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">GECİKTİ</span>' : '') +
-          '</div>';
-        row.querySelector('.title-slot').textContent = it.card.bankName + ' – ' + (it.overdue ? 'Son ödeme tarihi geçti' : 'Son ödemeye ' + it.days + ' gün kaldı');
-        list.appendChild(row);
-      });
-    },
-
-    populateCardSelect: function () {
-      var data = Store.getData();
-      var sel = document.querySelector('select[name="cardId"]');
-      sel.innerHTML = '';
-      data.cards.forEach(function (card) {
-        var opt = document.createElement('option');
-        opt.value = card.id;
-        opt.textContent = card.bankName + (card.cardLabel ? ' · ' + card.cardLabel : '');
-        sel.appendChild(opt);
       });
     }
-  };
 
-  function escapeAttr(str) {
-    return String(str).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    document.getElementById('donutCenter').textContent = fmtTL0.format(t.debt);
+    document.getElementById('donutSub').textContent = 'Toplam limit ' + fmtTL0.format(t.limit) + ' · Kalan ' + fmtTL0.format(t.available);
+  }
+};
+
+/* ==================== UI (Render katmanı) ==================== */
+const UI = {
+  currentView: 'dashboard',
+  calCursor: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })(),
+
+  el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  },
+
+  toast(msg, type = 'ok') {
+    const wrap = document.getElementById('toastWrap');
+    const colors = { ok: 'bg-gray-900 dark:bg-white text-white dark:text-gray-900', warn: 'bg-warn text-gray-900', danger: 'bg-danger text-white' };
+    const icons = { ok: 'fa-circle-check', warn: 'fa-triangle-exclamation', danger: 'fa-circle-xmark' };
+    const t = this.el('div', 'toast-enter flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-pop text-sm font-medium ' + colors[type]);
+    const i = this.el('i', 'fa-solid ' + icons[type] + ' mt-0.5');
+    t.appendChild(i);
+    t.appendChild(this.el('span', 'flex-1', msg));
+    wrap.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); }, 3600);
+  },
+
+  switchView(name) {
+    this.currentView = name;
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('view-' + name).classList.remove('hidden');
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      const active = b.dataset.view === name;
+      b.classList.toggle('bg-black/5', active && !document.documentElement.classList.contains('dark'));
+      b.classList.toggle('dark:bg-white/10', active);
+      b.classList.toggle('text-accent', active);
+      b.classList.toggle('text-gray-600', !active);
+      b.classList.toggle('dark:text-gray-300', !active);
+    });
+    if (name === 'calendar') this.renderCalendar();
+    if (name === 'settings') this.renderSettings();
+  },
+
+  renderAll() {
+    const has = Store.data.cards.length > 0;
+    document.getElementById('emptyState').classList.toggle('hidden', has);
+    document.getElementById('dashContent').classList.toggle('hidden', !has);
+    if (has) {
+      Charts.renderDonut();
+      Charts.renderTrend();
+      this.renderWidgets();
+      this.renderCards();
+      this.renderTransactions();
+    }
+    this.renderBell();
+    if (this.currentView === 'calendar') this.renderCalendar();
+  },
+
+  renderWidgets() {
+    const t = Calc.totals();
+    const up = Calc.upcomingPayments(7);
+
+    const wUp = document.getElementById('wUpcoming');
+    const wUpSub = document.getElementById('wUpcomingSub');
+    if (up.length === 0) { wUp.textContent = 'Ödeme yok'; wUpSub.textContent = 'Önümüzdeki 7 gün temiz 🎉'; }
+    else {
+      wUp.textContent = up.length + ' kart · ' + fmtTL0.format(up.reduce((s, n) => s + n.card.currentDebt, 0));
+      const first = up[0];
+      wUpSub.textContent = 'En yakın: ' + first.card.bankName + ' — ' + (first.days === 0 ? 'bugün' : first.days + ' gün sonra');
+    }
+
+    document.getElementById('wMinPay').textContent = fmtTL.format(t.minPay);
+
+    const pct = Math.round(t.usage * 100);
+    document.getElementById('wUsage').textContent = '%' + pct;
+    const bar = document.getElementById('wUsageBar');
+    bar.style.width = Math.min(pct, 100) + '%';
+    bar.style.backgroundColor = Calc.usageColor(t.usage);
+
+    const badge = document.getElementById('usageBadge');
+    badge.textContent = '%' + pct + ' kullanım';
+    const col = Calc.usageColor(t.usage);
+    badge.style.color = col === CONFIG.statusColors.warn ? '#8a6d00' : col;
+    badge.style.backgroundColor = col + '22';
+  },
+
+  renderCards() {
+    const grid = document.getElementById('cardsGrid');
+    grid.textContent = '';
+    document.getElementById('cardCount').textContent = Store.data.cards.length + ' kart';
+
+    Store.data.cards.forEach(card => {
+      const ratio = Calc.usage(card);
+      const color = Calc.usageColor(ratio);
+      const statement = Calc.nextOccurrence(card.statementDay);
+      const due = Calc.nextOccurrence(card.dueDay);
+      const minPay = Calc.minPayment(card);
+      const overdue = card.currentDebt > 0 && Calc.daysUntil(due) <= Store.data.settings.notificationThresholdDays;
+
+      const wrap = this.el('article', 'fade-in rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark overflow-hidden hover:-translate-y-0.5 hover:shadow-pop transition-all duration-300 cursor-pointer');
+      wrap.setAttribute('role', 'button');
+      wrap.tabIndex = 0;
+      wrap.addEventListener('click', () => Modal.cardDetail(card.id));
+      wrap.addEventListener('keydown', e => { if (e.key === 'Enter') Modal.cardDetail(card.id); });
+
+      // Banka kartı görseli
+      const top = this.el('div', 'bank-card p-4 text-white');
+      top.style.setProperty('--bc1', card.color[0]);
+      top.style.setProperty('--bc2', card.color[1]);
+      const topRow = this.el('div', 'flex items-center justify-between mb-5');
+      const nameBox = this.el('div', 'min-w-0');
+      const bn = this.el('p', 'font-bold truncate', card.bankName);
+      const cl = this.el('p', 'text-xs text-white/70 truncate', card.cardLabel || 'Kredi kartı');
+      nameBox.append(bn, cl);
+      const icon = this.el('i', 'fa-solid ' + Calc.bankIcon(card.bankName) + ' text-xl text-white/85');
+      topRow.append(nameBox, icon);
+      const debtLabel = this.el('p', 'text-[11px] uppercase tracking-wider text-white/60 font-medium', 'Güncel borç');
+      const debtVal = this.el('p', 'text-2xl font-extrabold num', fmtTL.format(card.currentDebt));
+      top.append(topRow, debtLabel, debtVal);
+
+      // Alt bilgi bölümü
+      const body = this.el('div', 'p-4 space-y-3');
+
+      const barWrap = this.el('div');
+      const barTop = this.el('div', 'flex justify-between text-xs mb-1.5');
+      barTop.append(
+        this.el('span', 'text-gray-500 dark:text-gray-400', 'Limit kullanımı'),
+        this.el('span', 'font-semibold num', '%' + Math.round(ratio * 100))
+      );
+      const track = this.el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+      const fill = this.el('div', 'progress-fill h-full rounded-full');
+      fill.style.width = Math.min(ratio * 100, 100) + '%';
+      fill.style.backgroundColor = color;
+      track.appendChild(fill);
+      barWrap.append(barTop, track);
+
+      const stats = this.el('div', 'grid grid-cols-2 gap-2 text-xs');
+      const mk = (label, val, extraCls) => {
+        const b = this.el('div', 'rounded-lg bg-black/[.03] dark:bg-white/5 px-2.5 py-2');
+        b.append(this.el('p', 'text-gray-500 dark:text-gray-400 mb-0.5', label), this.el('p', 'font-semibold num ' + (extraCls || ''), val));
+        return b;
+      };
+      stats.append(
+        mk('Limit', fmtTL0.format(card.limit)),
+        mk('Kullanılabilir', fmtTL0.format(Math.max(card.limit - card.currentDebt, 0))),
+        mk('Hesap kesim', fmtDateShort.format(statement)),
+        mk('Son ödeme', fmtDateShort.format(due), overdue ? 'text-danger' : '')
+      );
+
+      const minRow = this.el('div', 'flex items-center justify-between text-xs pt-1');
+      minRow.append(
+        this.el('span', 'text-gray-500 dark:text-gray-400', 'Asgari ödeme (%' + Math.round(card.minPaymentRate * 100) + ')'),
+        this.el('span', 'font-bold num', fmtTL.format(minPay))
+      );
+
+      body.append(barWrap, stats, minRow);
+      wrap.append(top, body);
+      grid.appendChild(wrap);
+    });
+  },
+
+  renderTransactions() {
+    const list = document.getElementById('txList');
+    list.textContent = '';
+    const txs = [...Store.data.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
+
+    if (txs.length === 0) {
+      const empty = this.el('p', 'px-5 py-8 text-sm text-gray-400 dark:text-gray-500 text-center', 'Henüz işlem yok. "+ Ekle" ile ilk harcama veya ödemenizi kaydedin.');
+      list.appendChild(empty);
+      return;
+    }
+
+    txs.forEach(tx => {
+      const card = Store.data.cards.find(c => c.id === tx.cardId);
+      const row = this.el('div', 'px-5 py-3.5 flex items-center gap-3.5 border-b border-black/5 dark:border-white/5 last:border-0');
+      const isExp = tx.type === 'expense';
+      const ic = this.el('div', 'w-9 h-9 rounded-xl grid place-items-center shrink-0 ' + (isExp ? 'bg-danger/10 text-danger' : 'bg-ok/10 text-ok'));
+      ic.appendChild(this.el('i', 'fa-solid ' + (isExp ? 'fa-arrow-up' : 'fa-arrow-down') + ' text-sm'));
+      const mid = this.el('div', 'flex-1 min-w-0');
+      mid.append(
+        this.el('p', 'text-sm font-medium truncate', tx.description || (isExp ? 'Harcama' : 'Ödeme')),
+        this.el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate', (card ? card.bankName : 'Silinmiş kart') + ' · ' + fmtDate.format(new Date(tx.date)))
+      );
+      const amt = this.el('p', 'text-sm font-bold num ' + (isExp ? 'text-danger' : 'text-ok'), (isExp ? '−' : '+') + fmtTL.format(tx.amount));
+      row.append(ic, mid, amt);
+      list.appendChild(row);
+    });
+  },
+
+  renderBell() {
+    const notifs = Calc.notifications();
+    const badge = document.getElementById('bellBadge');
+    const list = document.getElementById('bellList');
+    badge.classList.toggle('hidden', notifs.length === 0);
+    badge.textContent = notifs.length;
+
+    list.textContent = '';
+    if (notifs.length === 0) {
+      const ok = this.el('div', 'px-4 py-8 text-center');
+      ok.appendChild(this.el('i', 'fa-solid fa-circle-check text-ok text-2xl mb-2'));
+      ok.appendChild(this.el('p', 'text-sm text-gray-500 dark:text-gray-400', 'Yaklaşan ödeme yok. Her şey yolunda!'));
+      list.appendChild(ok);
+      return;
+    }
+
+    notifs.forEach(n => {
+      const overdue = n.days < 0;
+      const row = this.el('div', 'px-4 py-3 flex items-start gap-3 border-b border-black/5 dark:border-white/5 last:border-0');
+      const dot = this.el('div', 'mt-1 w-2.5 h-2.5 rounded-full shrink-0 ' + (overdue || n.days <= 1 ? 'bg-danger' : 'bg-warn'));
+      const box = this.el('div', 'min-w-0');
+      const title = this.el('p', 'text-sm font-semibold truncate', n.card.bankName + (overdue ? ' — GECİKTİ' : n.days === 0 ? ' — son ödeme bugün' : ' — son ödemeye ' + n.days + ' gün'));
+      if (overdue) title.classList.add('text-danger');
+      box.append(
+        title,
+        this.el('p', 'text-xs text-gray-500 dark:text-gray-400 num', 'Asgari: ' + fmtTL.format(Calc.minPayment(n.card)) + ' · Toplam: ' + fmtTL.format(n.card.currentDebt)),
+        this.el('p', 'text-[11px] text-gray-400 dark:text-gray-500', fmtDate.format(n.due))
+      );
+      row.append(dot, box);
+      list.appendChild(row);
+    });
+  },
+
+  /* ---------- TAKVİM ---------- */
+  renderCalendar() {
+    const { y, m } = this.calCursor;
+    document.getElementById('calTitle').textContent = CONFIG.monthNames[m] + ' ' + y;
+    const grid = document.getElementById('calGrid');
+    grid.textContent = '';
+    document.getElementById('calDetail').classList.add('hidden');
+
+    const firstDay = new Date(y, m, 1);
+    const startOffset = (firstDay.getDay() + 6) % 7; // Pazartesi başlangıç
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const today = Calc.today();
+
+    // Bu ay için olay haritası
+    const events = {}; // day -> [{type, card}]
+    Store.data.cards.forEach(card => {
+      const sd = Calc.clampDay(y, m, card.statementDay);
+      const dd = Calc.clampDay(y, m, card.dueDay);
+      (events[sd] = events[sd] || []).push({ type: 'statement', card });
+      (events[dd] = events[dd] || []).push({ type: 'due', card });
+    });
+
+    for (let i = 0; i < startOffset; i++) grid.appendChild(this.el('div'));
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const cellDate = new Date(y, m, d);
+      const isToday = cellDate.getTime() === today.getTime();
+      const evs = events[d] || [];
+
+      const cell = this.el('button', 'relative aspect-square sm:aspect-[4/3] rounded-xl text-sm font-medium flex flex-col items-center justify-center gap-1 transition-colors ' +
+        (isToday ? 'bg-accent text-white shadow-card' : evs.length ? 'bg-black/[.04] dark:bg-white/[.06] hover:bg-black/10 dark:hover:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300'));
+      cell.appendChild(this.el('span', 'num', d));
+
+      if (evs.length) {
+        const dots = this.el('div', 'flex items-center gap-0.5');
+        const stCount = evs.filter(e => e.type === 'statement').length;
+        const duCount = evs.filter(e => e.type === 'due').length;
+        if (stCount) {
+          const dot = this.el('span', 'cal-dot bg-warn');
+          dots.appendChild(dot);
+          if (stCount > 1) dots.appendChild(this.el('span', 'text-[9px] font-bold num ' + (isToday ? 'text-white/90' : 'text-yellow-600 dark:text-warn'), stCount));
+        }
+        if (duCount) {
+          const dot = this.el('span', 'cal-dot bg-danger');
+          dots.appendChild(dot);
+          if (duCount > 1) dots.appendChild(this.el('span', 'text-[9px] font-bold num ' + (isToday ? 'text-white/90' : 'text-danger'), duCount));
+        }
+        cell.appendChild(dots);
+        cell.addEventListener('click', () => this.renderCalDetail(d, evs, cellDate));
+      }
+      grid.appendChild(cell);
+    }
+  },
+
+  renderCalDetail(day, evs, date) {
+    const panel = document.getElementById('calDetail');
+    panel.textContent = '';
+    panel.classList.remove('hidden');
+    panel.appendChild(this.el('h3', 'font-bold mb-3', fmtDate.format(date)));
+
+    evs.forEach(ev => {
+      const isDue = ev.type === 'due';
+      const row = this.el('div', 'flex items-center gap-3 py-2.5 border-b border-black/5 dark:border-white/5 last:border-0');
+      const dot = this.el('span', 'cal-dot shrink-0 ' + (isDue ? 'bg-danger' : 'bg-warn'));
+      const box = this.el('div', 'flex-1 min-w-0');
+      box.append(
+        this.el('p', 'text-sm font-semibold truncate', ev.card.bankName + ' — ' + (isDue ? 'Son ödeme günü' : 'Hesap kesim günü')),
+        isDue
+          ? this.el('p', 'text-xs text-gray-500 dark:text-gray-400 num', 'Toplam borç: ' + fmtTL.format(ev.card.currentDebt) + ' · Asgari: ' + fmtTL.format(Calc.minPayment(ev.card)))
+          : this.el('p', 'text-xs text-gray-500 dark:text-gray-400', 'Bu tarihte dönem borcu hesaplanır.')
+      );
+      row.append(dot, box);
+      panel.appendChild(row);
+    });
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  },
+
+  /* ---------- AYARLAR ---------- */
+  renderSettings() {
+    document.getElementById('thresholdInput').value = Store.data.settings.notificationThresholdDays;
+    const last = Store.data.settings.lastExport;
+    document.getElementById('lastBackup').textContent = last
+      ? 'Son yedek: ' + fmtDate.format(new Date(last))
+      : 'Henüz yedek alınmadı.';
+  }
+};
+
+/* ==================== MODAL ==================== */
+const Modal = {
+  open(builder) {
+    const box = document.getElementById('modalBox');
+    box.textContent = '';
+    builder(box);
+    document.getElementById('modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    const firstInput = box.querySelector('input, select, button');
+    if (firstInput) firstInput.focus();
+  },
+
+  close() {
+    document.getElementById('modal').classList.add('hidden');
+    document.body.style.overflow = '';
+  },
+
+  header(box, title, subtitle) {
+    const h = UI.el('div', 'px-6 pt-6 pb-4 flex items-start justify-between');
+    const t = UI.el('div');
+    t.appendChild(UI.el('h3', 'text-lg font-bold', title));
+    if (subtitle) t.appendChild(UI.el('p', 'text-xs text-gray-500 dark:text-gray-400 mt-0.5', subtitle));
+    const x = UI.el('button', 'w-8 h-8 rounded-lg grid place-items-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-gray-400');
+    x.setAttribute('aria-label', 'Kapat');
+    x.appendChild(UI.el('i', 'fa-solid fa-xmark'));
+    x.addEventListener('click', () => this.close());
+    h.append(t, x);
+    box.appendChild(h);
+  },
+
+  field(label, inputEl, errId) {
+    const w = UI.el('div');
+    const l = UI.el('label', 'block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5', label);
+    w.append(l, inputEl);
+    if (errId) {
+      const err = UI.el('p', 'hidden text-xs text-danger mt-1 font-medium');
+      err.id = errId;
+      w.appendChild(err);
+    }
+    return w;
+  },
+
+  input(attrs = {}) {
+    const i = UI.el('input', 'w-full h-11 px-3.5 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent placeholder:text-gray-400 num');
+    Object.entries(attrs).forEach(([k, v]) => i.setAttribute(k, v));
+    return i;
+  },
+
+  showErr(id, msg) {
+    const e = document.getElementById(id);
+    if (e) { e.textContent = msg; e.classList.remove('hidden'); }
+  },
+  clearErrs(box) { box.querySelectorAll('[id^="err-"]').forEach(e => e.classList.add('hidden')); },
+
+  /* ---- Yeni Kart ---- */
+  newCard() {
+    this.open(box => {
+      this.header(box, 'Yeni kart ekle', 'Kart bilgilerini girin, panel otomatik güncellenir.');
+      const body = UI.el('div', 'px-6 pb-6 space-y-4');
+
+      const bankWrap = UI.el('div', 'space-y-2');
+      const bank = UI.el('select', 'w-full h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent');
+      const ph = UI.el('option', '', 'Banka seçin…');
+      ph.value = ''; ph.disabled = true; ph.selected = true;
+      bank.appendChild(ph);
+      CONFIG.banks.forEach(b => {
+        const o = UI.el('option', '', b);
+        o.value = b;
+        bank.appendChild(o);
+      });
+      const bankCustom = this.input({ type: 'text', placeholder: 'Banka adını yazın', maxlength: '40' });
+      bankCustom.classList.add('hidden');
+      bank.addEventListener('change', () => {
+        bankCustom.classList.toggle('hidden', bank.value !== 'Diğer');
+        if (bank.value === 'Diğer') bankCustom.focus();
+      });
+      bankWrap.append(bank, bankCustom);
+      const label = this.input({ type: 'text', placeholder: 'örn. Bonus Platinum (opsiyonel)', maxlength: '40' });
+      const limit = this.input({ type: 'text', inputmode: 'decimal', placeholder: 'örn. 50.000' });
+      const debt = this.input({ type: 'text', inputmode: 'decimal', placeholder: '0 (varsa mevcut borcunuz)' });
+      const stDay = this.input({ type: 'number', min: '1', max: '31', placeholder: '1–31' });
+      const duDay = this.input({ type: 'number', min: '1', max: '31', placeholder: '1–31' });
+
+      const rateWrap = UI.el('div', 'grid grid-cols-2 gap-2');
+      let selectedRate = CONFIG.minPaymentRates[0];
+      const rateBtns = CONFIG.minPaymentRates.map(r => {
+        const b = UI.el('button', 'h-11 rounded-xl text-sm font-semibold transition-colors', '%' + Math.round(r * 100));
+        b.type = 'button';
+        const paint = () => {
+          rateBtns.forEach(x => x.className = 'h-11 rounded-xl text-sm font-semibold transition-colors ' + (x._rate === selectedRate ? 'bg-accent text-white' : 'bg-black/5 dark:bg-white/10'));
+        };
+        b._rate = r;
+        b.addEventListener('click', () => { selectedRate = r; paint(); });
+        setTimeout(paint, 0);
+        return b;
+      });
+      rateBtns.forEach(b => rateWrap.appendChild(b));
+
+      const dayGrid = UI.el('div', 'grid grid-cols-2 gap-3');
+      dayGrid.append(
+        this.field('Hesap kesim günü', stDay, 'err-st'),
+        this.field('Son ödeme günü', duDay, 'err-du')
+      );
+
+      const submit = UI.el('button', 'w-full h-12 rounded-xl bg-accent hover:bg-blue-600 text-white font-bold text-sm transition-colors shadow-card', 'Kartı ekle');
+
+      body.append(
+        this.field('Banka', bankWrap, 'err-bank'),
+        this.field('Kart etiketi', label),
+        this.field('Kart limiti (₺)', limit, 'err-limit'),
+        this.field('Mevcut borç (₺)', debt, 'err-debt'),
+        dayGrid,
+        this.field('Asgari ödeme oranı', rateWrap),
+        submit
+      );
+      box.appendChild(body);
+
+      submit.addEventListener('click', () => {
+        this.clearErrs(box);
+        let valid = true;
+        const bankV = bank.value === 'Diğer' ? bankCustom.value.trim() : bank.value;
+        const limitV = Calc.parseAmount(limit.value);
+        const debtV = debt.value.trim() === '' ? 0 : Calc.parseAmount(debt.value);
+        const stV = parseInt(stDay.value, 10);
+        const duV = parseInt(duDay.value, 10);
+
+        if (!bankV) { this.showErr('err-bank', bank.value === 'Diğer' ? 'Banka adını yazın.' : 'Listeden bir banka seçin.'); valid = false; }
+        if (isNaN(limitV) || limitV <= 0) { this.showErr('err-limit', 'Geçerli, pozitif bir limit girin.'); valid = false; }
+        if (isNaN(debtV) || debtV < 0) { this.showErr('err-debt', 'Geçerli bir tutar girin (boş bırakılırsa 0).'); valid = false; }
+        if (!isNaN(limitV) && !isNaN(debtV) && debtV > limitV) { this.showErr('err-debt', 'Mevcut borç limiti aşamaz.'); valid = false; }
+        if (isNaN(stV) || stV < 1 || stV > 31) { this.showErr('err-st', '1–31 arası bir gün girin.'); valid = false; }
+        if (isNaN(duV) || duV < 1 || duV > 31) { this.showErr('err-du', '1–31 arası bir gün girin.'); valid = false; }
+        if (!valid) return;
+
+        if (Store.addCard({ bankName: bankV, cardLabel: label.value.trim(), limit: limitV, currentDebt: debtV, statementDay: stV, dueDay: duV, minPaymentRate: selectedRate })) {
+          this.close();
+          UI.renderAll();
+          UI.toast(bankV + ' kartı eklendi.');
+        }
+      });
+    });
+  },
+
+  /* ---- Harcama / Ödeme ---- */
+  newTransaction(presetCardId) {
+    if (Store.data.cards.length === 0) {
+      UI.toast('Önce bir kart eklemelisiniz.', 'warn');
+      this.newCard();
+      return;
+    }
+    this.open(box => {
+      this.header(box, 'Harcama / ödeme ekle', 'İşlem, kartın güncel borcuna anında yansır.');
+      const body = UI.el('div', 'px-6 pb-6 space-y-4');
+
+      const select = UI.el('select', 'w-full h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent');
+      Store.data.cards.forEach(c => {
+        const o = UI.el('option', '', c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''));
+        o.value = c.id;
+        if (c.id === presetCardId) o.selected = true;
+        select.appendChild(o);
+      });
+
+      let txType = 'expense';
+      const typeWrap = UI.el('div', 'grid grid-cols-2 gap-2');
+      const mkType = (val, labelTxt, icon) => {
+        const b = UI.el('button', 'h-11 rounded-xl text-sm font-semibold transition-colors');
+        b.type = 'button';
+        b.appendChild(UI.el('i', 'fa-solid ' + icon + ' mr-1.5'));
+        b.appendChild(document.createTextNode(labelTxt));
+        b._val = val;
+        b.addEventListener('click', () => { txType = val; paintTypes(); });
+        return b;
+      };
+      const tExp = mkType('expense', 'Harcama', 'fa-cart-shopping');
+      const tPay = mkType('payment', 'Ödeme yapıldı', 'fa-circle-check');
+      const paintTypes = () => {
+        [tExp, tPay].forEach(b => {
+          const on = b._val === txType;
+          b.className = 'h-11 rounded-xl text-sm font-semibold transition-colors ' + (on ? (txType === 'expense' ? 'bg-danger text-white' : 'bg-ok text-white') : 'bg-black/5 dark:bg-white/10');
+        });
+      };
+      typeWrap.append(tExp, tPay);
+      setTimeout(paintTypes, 0);
+
+      const amount = this.input({ type: 'text', inputmode: 'decimal', placeholder: 'örn. 1.250,50' });
+      const desc = this.input({ type: 'text', placeholder: 'örn. Market alışverişi (opsiyonel)', maxlength: '60' });
+      const dateI = this.input({ type: 'date' });
+      dateI.value = new Date().toISOString().slice(0, 10);
+
+      const submit = UI.el('button', 'w-full h-12 rounded-xl bg-accent hover:bg-blue-600 text-white font-bold text-sm transition-colors shadow-card', 'İşlemi kaydet');
+
+      body.append(
+        this.field('Kart', select),
+        this.field('İşlem türü', typeWrap),
+        this.field('Tutar (₺)', amount, 'err-amt'),
+        this.field('Açıklama', desc),
+        this.field('Tarih', dateI, 'err-date'),
+        submit
+      );
+      box.appendChild(body);
+
+      submit.addEventListener('click', () => {
+        this.clearErrs(box);
+        const amtV = Calc.parseAmount(amount.value);
+        if (isNaN(amtV) || amtV <= 0) { this.showErr('err-amt', 'Geçerli, pozitif bir tutar girin.'); return; }
+        if (!dateI.value) { this.showErr('err-date', 'Tarih seçin.'); return; }
+
+        const card = Store.data.cards.find(c => c.id === select.value);
+        if (txType === 'expense' && card && card.currentDebt + amtV > card.limit) {
+          this.showErr('err-amt', 'Bu harcama kart limitini aşıyor (kalan: ' + fmtTL.format(card.limit - card.currentDebt) + ').');
+          return;
+        }
+
+        if (Store.addTransaction({ cardId: select.value, type: txType, amount: amtV, description: desc.value.trim(), date: new Date(dateI.value + 'T12:00:00').toISOString() })) {
+          this.close();
+          UI.renderAll();
+          UI.toast(txType === 'expense' ? 'Harcama kaydedildi.' : 'Ödeme kaydedildi, borç güncellendi.');
+        }
+      });
+    });
+  },
+
+  /* ---- Kart Detay ---- */
+  cardDetail(cardId) {
+    const card = Store.data.cards.find(c => c.id === cardId);
+    if (!card) return;
+    this.open(box => {
+      this.header(box, card.bankName, card.cardLabel || 'Kart detayı');
+      const body = UI.el('div', 'px-6 pb-6 space-y-4');
+
+      const t = UI.el('div', 'rounded-xl bg-black/[.03] dark:bg-white/5 p-4 grid grid-cols-2 gap-3 text-sm');
+      const mk = (l, v) => {
+        const d = UI.el('div');
+        d.append(UI.el('p', 'text-xs text-gray-500 dark:text-gray-400', l), UI.el('p', 'font-bold num', v));
+        return d;
+      };
+      t.append(
+        mk('Güncel borç', fmtTL.format(card.currentDebt)),
+        mk('Limit', fmtTL0.format(card.limit)),
+        mk('Asgari ödeme', fmtTL.format(Calc.minPayment(card))),
+        mk('Son ödeme', fmtDate.format(Calc.nextOccurrence(card.dueDay)))
+      );
+      body.appendChild(t);
+
+      const txs = Store.data.transactions.filter(x => x.cardId === cardId).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+      if (txs.length) {
+        body.appendChild(UI.el('p', 'text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider', 'Son işlemler'));
+        txs.forEach(tx => {
+          const isExp = tx.type === 'expense';
+          const r = UI.el('div', 'flex items-center justify-between text-sm py-1.5');
+          r.append(
+            UI.el('span', 'text-gray-600 dark:text-gray-300 truncate mr-3', tx.description || (isExp ? 'Harcama' : 'Ödeme')),
+            UI.el('span', 'font-semibold num shrink-0 ' + (isExp ? 'text-danger' : 'text-ok'), (isExp ? '−' : '+') + fmtTL.format(tx.amount))
+          );
+          body.appendChild(r);
+        });
+      }
+
+      const actions = UI.el('div', 'grid grid-cols-2 gap-3 pt-2');
+      const addTx = UI.el('button', 'h-11 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold text-sm transition-colors', 'İşlem ekle');
+      addTx.addEventListener('click', () => { this.close(); this.newTransaction(cardId); });
+      const del = UI.el('button', 'h-11 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger font-semibold text-sm transition-colors', 'Kartı sil');
+      del.addEventListener('click', () => {
+        if (confirm(card.bankName + ' kartı ve tüm işlemleri silinecek. Emin misiniz?')) {
+          Store.deleteCard(cardId);
+          this.close();
+          UI.renderAll();
+          UI.toast('Kart silindi.', 'warn');
+        }
+      });
+      actions.append(addTx, del);
+      body.appendChild(actions);
+      box.appendChild(body);
     });
   }
+};
 
-  /* =============================================================== */
-  /* Events                                                            */
-  /* =============================================================== */
-  var Events = {
-    init: function () {
-      this.bindTheme();
-      this.bindAddModal();
-      this.bindNotifPanel();
-      this.bindCalendar();
-      this.bindDayPopover();
-      this.bindSettings();
-    },
+/* ==================== BACKUP (Export / Import) ==================== */
+const Backup = {
+  exportJSON() {
+    Store.data.settings.lastExport = new Date().toISOString();
+    Store.save();
+    const blob = new Blob([JSON.stringify(Store.data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    a.href = url;
+    a.download = 'kredi-karti-yedek-' + d.toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    UI.renderSettings();
+    UI.toast('Yedek dosyası indirildi.');
+  },
 
-    bindTheme: function () {
-      document.getElementById('btnTheme').addEventListener('click', function () {
-        var isDark = document.documentElement.classList.toggle('dark');
-        Store.updateSettings({ theme: isDark ? 'dark' : 'light' });
-        Charts.donut = null; // renk şeması değiştiği için grafiği yeniden oluştur
-        UI.renderStats();
-      });
-    },
-
-    bindNotifPanel: function () {
-      var btn = document.getElementById('btnNotif');
-      var panel = document.getElementById('notifPanel');
-      btn.addEventListener('click', function () {
-        panel.classList.toggle('hidden');
-      });
-      document.getElementById('notifClose').addEventListener('click', function () {
-        panel.classList.add('hidden');
-      });
-      document.addEventListener('click', function (e) {
-        if (!panel.contains(e.target) && !btn.contains(e.target)) panel.classList.add('hidden');
-      });
-    },
-
-    bindCalendar: function () {
-      document.getElementById('calPrev').addEventListener('click', function () {
-        UI.calState.month--;
-        if (UI.calState.month < 0) { UI.calState.month = 11; UI.calState.year--; }
-        UI.renderCalendar();
-      });
-      document.getElementById('calNext').addEventListener('click', function () {
-        UI.calState.month++;
-        if (UI.calState.month > 11) { UI.calState.month = 0; UI.calState.year++; }
-        UI.renderCalendar();
-      });
-    },
-
-    bindDayPopover: function () {
-      document.getElementById('dayPopoverClose').addEventListener('click', function () {
-        document.getElementById('dayPopoverBackdrop').classList.add('hidden');
-      });
-      document.getElementById('dayPopoverBackdrop').addEventListener('click', function (e) {
-        if (e.target === this) this.classList.add('hidden');
-      });
-    },
-
-    resetAddModal: function () {
-      document.getElementById('addStepChoice').classList.remove('hidden');
-      document.getElementById('formNewCard').classList.add('hidden');
-      document.getElementById('formNewTx').classList.add('hidden');
-      document.getElementById('formNewCard').reset();
-      document.getElementById('formNewTx').reset();
-      document.querySelectorAll('#addModalBackdrop [class*="err-"]').forEach(function (el) { el.classList.add('hidden'); });
-    },
-
-    openAddModal: function () {
-      Events.resetAddModal();
-      var data = Store.getData();
-      if (data.cards.length === 0) {
-        // kart yoksa direkt kart formuna geç
-        document.getElementById('addStepChoice').classList.add('hidden');
-        document.getElementById('formNewCard').classList.remove('hidden');
-      }
-      document.getElementById('addModalBackdrop').classList.remove('hidden');
-      document.querySelector('input[name="date"]').valueAsDate = new Date();
-    },
-
-    bindAddModal: function () {
-      document.getElementById('btnAdd').addEventListener('click', Events.openAddModal);
-      document.getElementById('btnAddEmpty').addEventListener('click', Events.openAddModal);
-
-      document.querySelectorAll('.add-modal-close, #addModalClose1').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          document.getElementById('addModalBackdrop').classList.add('hidden');
-        });
-      });
-      document.getElementById('addModalBackdrop').addEventListener('click', function (e) {
-        if (e.target === this) this.classList.add('hidden');
-      });
-
-      document.getElementById('choiceNewCard').addEventListener('click', function () {
-        document.getElementById('addStepChoice').classList.add('hidden');
-        document.getElementById('formNewCard').classList.remove('hidden');
-      });
-      document.getElementById('choiceNewTx').addEventListener('click', function () {
-        if (Store.getData().cards.length === 0) {
-          Toast.show('Önce bir kart eklemelisiniz.', 'error');
-          return;
+  importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed || !Array.isArray(parsed.cards) || !Array.isArray(parsed.transactions)) {
+          throw new Error('schema');
         }
-        UI.populateCardSelect();
-        document.getElementById('addStepChoice').classList.add('hidden');
-        document.getElementById('formNewTx').classList.remove('hidden');
-      });
-      document.querySelectorAll('[data-back]').forEach(function (btn) {
-        btn.addEventListener('click', Events.resetAddModal);
-      });
+        // Temel şema doğrulama
+        const validCards = parsed.cards.every(c => c && typeof c.bankName === 'string' && typeof c.limit === 'number');
+        if (!validCards) throw new Error('schema');
 
-      document.getElementById('formNewCard').addEventListener('submit', Events.handleNewCardSubmit);
-      document.getElementById('formNewTx').addEventListener('submit', Events.handleNewTxSubmit);
-    },
+        if (!confirm('Mevcut tüm veriler bu yedekle DEĞİŞTİRİLECEK. Devam edilsin mi?')) return;
 
-    showFieldError: function (form, field, msg) {
-      var el = form.querySelector('.err-' + field);
-      if (el) { el.textContent = msg; el.classList.remove('hidden'); }
-    },
-    clearFieldError: function (form, field) {
-      var el = form.querySelector('.err-' + field);
-      if (el) el.classList.add('hidden');
-    },
-
-    handleNewCardSubmit: function (e) {
-      e.preventDefault();
-      var form = e.target;
-      var fd = new FormData(form);
-      var bankName = (fd.get('bankName') || '').toString().trim();
-      var cardLabel = (fd.get('cardLabel') || '').toString().trim();
-      var limit = Calc.parseTurkishNumber(fd.get('limit'));
-      var statementDay = parseInt(fd.get('statementDay'), 10);
-      var dueDay = parseInt(fd.get('dueDay'), 10);
-      var minPaymentRate = parseFloat(fd.get('minPaymentRate'));
-      var color = fd.get('color') || '#6366F1';
-      var currentDebtInput = fd.get('currentDebt');
-      var currentDebt = currentDebtInput ? Calc.parseTurkishNumber(currentDebtInput) : 0;
-
-      var valid = true;
-      ['bankName', 'limit', 'statementDay', 'dueDay'].forEach(function (f) { Events.clearFieldError(form, f); });
-
-      if (!bankName) { Events.showFieldError(form, 'bankName', 'Banka adı gerekli.'); valid = false; }
-      if (isNaN(limit) || limit <= 0) { Events.showFieldError(form, 'limit', 'Geçerli bir limit girin.'); valid = false; }
-      if (isNaN(statementDay) || statementDay < 1 || statementDay > 31) { Events.showFieldError(form, 'statementDay', '1-31 arası bir gün girin.'); valid = false; }
-      if (isNaN(dueDay) || dueDay < 1 || dueDay > 31) { Events.showFieldError(form, 'dueDay', '1-31 arası bir gün girin.'); valid = false; }
-      if (!valid) return;
-
-      var card = {
-        id: Store.uuid(),
-        bankName: bankName,
-        cardLabel: cardLabel,
-        limit: limit,
-        currentDebt: 0,
-        statementDay: statementDay,
-        dueDay: dueDay,
-        minPaymentRate: isNaN(minPaymentRate) ? CONFIG.DEFAULT_MIN_PAYMENT_RATE : minPaymentRate,
-        color: color,
-        createdAt: new Date().toISOString()
-      };
-
-      Store.addCard(card);
-
-      if (!isNaN(currentDebt) && currentDebt > 0) {
-        Store.addTransaction({
-          id: Store.uuid(),
-          cardId: card.id,
-          type: 'expense',
-          amount: Math.round(currentDebt * 100) / 100,
-          description: 'Açılış bakiyesi',
-          date: new Date().toISOString(),
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      document.getElementById('addModalBackdrop').classList.add('hidden');
-      Toast.show('Kart eklendi.', 'success');
-      UI.renderAll();
-    },
-
-    handleNewTxSubmit: function (e) {
-      e.preventDefault();
-      var form = e.target;
-      var fd = new FormData(form);
-      var cardId = fd.get('cardId');
-      var type = fd.get('type');
-      var amount = Calc.parseTurkishNumber(fd.get('amount'));
-      var description = (fd.get('description') || '').toString().trim();
-      var dateStr = fd.get('date');
-
-      Events.clearFieldError(form, 'amount');
-      if (isNaN(amount) || amount <= 0) {
-        Events.showFieldError(form, 'amount', 'Geçerli, pozitif bir tutar girin.');
-        return;
-      }
-
-      var data = Store.getData();
-      var card = data.cards.find(function (c) { return c.id === cardId; });
-      if (!card) { Toast.show('Kart bulunamadı.', 'error'); return; }
-
-      if (type === 'expense') {
-        var currentDebt = Calc.cardDebt(card.id, data.transactions);
-        if (currentDebt + amount > card.limit) {
-          Events.showFieldError(form, 'amount', 'Bu harcama kart limitini aşıyor (Kalan limit: ' + fmtCurrency.format(Math.max(card.limit - currentDebt, 0)) + ').');
-          return;
+        Store.data = Object.assign(Store.defaults(), parsed);
+        Store.data.settings = Object.assign(Store.defaults().settings, parsed.settings || {});
+        if (Store.save()) {
+          Theme.apply(Store.data.settings.theme);
+          UI.renderAll();
+          UI.renderSettings();
+          UI.toast('Yedek başarıyla geri yüklendi.');
         }
+      } catch (e) {
+        UI.toast('Dosya okunamadı: geçerli bir KartPanel yedeği değil.', 'danger');
       }
-
-      Store.addTransaction({
-        id: Store.uuid(),
-        cardId: cardId,
-        type: type,
-        amount: Math.round(amount * 100) / 100,
-        description: description,
-        date: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
-        createdAt: new Date().toISOString()
-      });
-
-      document.getElementById('addModalBackdrop').classList.add('hidden');
-      Toast.show(type === 'expense' ? 'Harcama eklendi.' : 'Ödeme eklendi.', 'success');
-      UI.renderAll();
-    },
-
-    /* -------- Ayarlar / Yedekleme -------- */
-    bindSettings: function () {
-      var backdrop = document.getElementById('settingsBackdrop');
-      document.getElementById('btnSettings').addEventListener('click', function () {
-        document.getElementById('settingThreshold').value = Store.getData().settings.notificationThresholdDays;
-        backdrop.classList.remove('hidden');
-      });
-      document.getElementById('settingsClose').addEventListener('click', function () {
-        backdrop.classList.add('hidden');
-      });
-      backdrop.addEventListener('click', function (e) { if (e.target === this) this.classList.add('hidden'); });
-
-      document.getElementById('settingThreshold').addEventListener('change', function (e) {
-        var val = parseInt(e.target.value, 10);
-        if (isNaN(val) || val < 1) val = CONFIG.DEFAULT_NOTIF_THRESHOLD_DAYS;
-        Store.updateSettings({ notificationThresholdDays: val });
-        UI.renderNotifications();
-        Toast.show('Bildirim eşiği güncellendi.', 'success');
-      });
-
-      document.getElementById('btnExport').addEventListener('click', function () {
-        var data = Store.getData();
-        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        var today = new Date().toISOString().slice(0, 10);
-        a.href = url;
-        a.download = 'kredi-karti-yedek-' + today + '.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        Toast.show('Yedek indirildi.', 'success');
-      });
-
-      document.getElementById('btnImport').addEventListener('click', function () {
-        document.getElementById('importFileInput').click();
-      });
-
-      document.getElementById('importFileInput').addEventListener('change', function (e) {
-        var file = e.target.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function (evt) {
-          var msgEl = document.getElementById('importMsg');
-          try {
-            var parsed = JSON.parse(evt.target.result);
-            if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.cards) || !Array.isArray(parsed.transactions) || !parsed.settings) {
-              throw new Error('Şema eksik');
-            }
-            Confirm.ask(
-              'Verileriniz değiştirilecek',
-              'Mevcut veriler silinecek ve yüklenen yedekle değiştirilecek. Devam edilsin mi?',
-              function () {
-                Store.replaceAll(parsed);
-                document.getElementById('settingsBackdrop').classList.add('hidden');
-                UI.renderAll();
-                Toast.show('Veriler başarıyla içe aktarıldı.', 'success');
-              }
-            );
-          } catch (err) {
-            msgEl.textContent = 'Geçersiz veya bozuk dosya. Lütfen geçerli bir yedek JSON dosyası seçin.';
-            msgEl.classList.remove('hidden');
-            msgEl.classList.add('text-red-500');
-          }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
-      });
-
-      document.getElementById('btnResetAll').addEventListener('click', function () {
-        Confirm.ask(
-          'Tüm veriler silinsin mi?',
-          'Bu işlem tüm kartlarınızı ve işlem geçmişinizi kalıcı olarak silecek. Bu geri alınamaz.',
-          function () {
-            Confirm.ask(
-              'Son bir kez daha onaylayın',
-              'Emin misiniz? Tüm veriler kalıcı olarak silinecek.',
-              function () {
-                Store.resetAll();
-                document.getElementById('settingsBackdrop').classList.add('hidden');
-                UI.renderAll();
-                Toast.show('Tüm veriler sıfırlandı.', 'success');
-              }
-            );
-          }
-        );
-      });
-    }
-  };
-
-  /* =============================================================== */
-  /* init                                                               */
-  /* =============================================================== */
-  function init() {
-    Store.load();
-    Events.init();
-    UI.renderAll();
+    };
+    reader.onerror = () => UI.toast('Dosya okunurken hata oluştu.', 'danger');
+    reader.readAsText(file);
   }
+};
 
-  document.addEventListener('DOMContentLoaded', init);
-})();
+/* ==================== THEME ==================== */
+const Theme = {
+  apply(theme) {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    Store.data.settings.theme = theme;
+    if (Charts.donut) { Charts.donut.destroy(); Charts.donut = null; }
+    if (Charts.trend) { Charts.trend.destroy(); Charts.trend = null; }
+    if (Store.data.cards.length) { Charts.renderDonut(); Charts.renderTrend(); }
+  },
+  toggle() {
+    const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+    this.apply(next);
+    Store.save();
+  }
+};
+
+/* ==================== EVENTS & INIT ==================== */
+const Events = {
+  bind() {
+    // Görünüm geçişleri
+    document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => UI.switchView(b.dataset.view)));
+
+    // Tema
+    document.getElementById('themeBtn').addEventListener('click', () => Theme.toggle());
+
+    // + Ekle menüsü
+    const addBtn = document.getElementById('addBtn');
+    const addMenu = document.getElementById('addMenu');
+    addBtn.addEventListener('click', e => { e.stopPropagation(); addMenu.classList.toggle('hidden'); document.getElementById('bellPanel').classList.add('hidden'); });
+    document.getElementById('menuNewCard').addEventListener('click', () => { addMenu.classList.add('hidden'); Modal.newCard(); });
+    document.getElementById('menuNewTx').addEventListener('click', () => { addMenu.classList.add('hidden'); Modal.newTransaction(); });
+    document.getElementById('emptyAddBtn').addEventListener('click', () => Modal.newCard());
+
+    // Bildirim çanı
+    const bellBtn = document.getElementById('bellBtn');
+    const bellPanel = document.getElementById('bellPanel');
+    bellBtn.addEventListener('click', e => { e.stopPropagation(); bellPanel.classList.toggle('hidden'); addMenu.classList.add('hidden'); });
+
+    // Dışarı tıklayınca menüleri kapat
+    document.addEventListener('click', () => { addMenu.classList.add('hidden'); bellPanel.classList.add('hidden'); });
+    addMenu.addEventListener('click', e => e.stopPropagation());
+    bellPanel.addEventListener('click', e => e.stopPropagation());
+
+    // Modal kapatma
+    document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') Modal.close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') Modal.close(); });
+
+    // Borç seyri aralık butonları
+    document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => {
+      Charts.trendRange = parseInt(b.dataset.range, 10);
+      Charts.renderTrend();
+    }));
+
+    // Takvim navigasyonu
+    document.getElementById('calPrev').addEventListener('click', () => {
+      UI.calCursor.m -= 1;
+      if (UI.calCursor.m < 0) { UI.calCursor.m = 11; UI.calCursor.y -= 1; }
+      UI.renderCalendar();
+    });
+    document.getElementById('calNext').addEventListener('click', () => {
+      UI.calCursor.m += 1;
+      if (UI.calCursor.m > 11) { UI.calCursor.m = 0; UI.calCursor.y += 1; }
+      UI.renderCalendar();
+    });
+
+    // Ayarlar
+    document.getElementById('exportBtn').addEventListener('click', () => Backup.exportJSON());
+    document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+    document.getElementById('importFile').addEventListener('change', e => {
+      if (e.target.files[0]) Backup.importJSON(e.target.files[0]);
+      e.target.value = '';
+    });
+    document.getElementById('thresholdSave').addEventListener('click', () => {
+      const v = parseInt(document.getElementById('thresholdInput').value, 10);
+      if (isNaN(v) || v < 1 || v > 15) { UI.toast('1–15 arası bir değer girin.', 'warn'); return; }
+      Store.data.settings.notificationThresholdDays = v;
+      if (Store.save()) { UI.renderAll(); UI.toast('Bildirim ayarı güncellendi.'); }
+    });
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (!confirm('TÜM veriler silinecek. Emin misiniz?')) return;
+      if (!confirm('Bu işlem geri alınamaz. Son kez onaylıyor musunuz?')) return;
+      Store.reset();
+      UI.renderAll();
+      UI.renderSettings();
+      UI.toast('Tüm veriler sıfırlandı.', 'warn');
+    });
+  }
+};
+
+function init() {
+  Store.load();
+  Events.bind();
+  UI.switchView('dashboard');
+  UI.renderAll();
+  if (Store.corrupt) {
+    UI.toast('Kayıtlı veriniz okunamadı. Ayarlar bölümünden yedeğinizi geri yükleyebilirsiniz.', 'danger');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
