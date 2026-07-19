@@ -1,0 +1,13 @@
+{
+  "name": "kartpanel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kredi kartı borç, limit ve ödeme tarihi takibi — tarayıcıda çalışan, sunucusuz panel.",
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes serve . -l 5173",
+    "start": "npm run dev"
+  },
+  "keywords": ["kredi-kartı", "borç-takibi", "vanilla-js", "localstorage"],
+  "license": "MIT"
+}
