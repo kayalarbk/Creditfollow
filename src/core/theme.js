@@ -14,6 +14,7 @@ export const Theme = {
       Charts.renderDonut();
       Charts.renderTrend();
       Charts.renderCategory();
+      Charts.renderCardBreakdown();
     }
   },
 

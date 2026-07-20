@@ -1,7 +1,7 @@
 import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
 import { el } from '../../utils/dom.js';
-import { fmtTL, parseAmount, safeDate } from '../../utils/format.js';
+import { fmtTL, fmtDateSafe, parseAmount, safeDate } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
@@ -12,6 +12,27 @@ function dateInputValue(value) {
   const d = safeDate(value) || new Date();
   const pad = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+/** Yinelenen sayılmak için iki işlem arasındaki en fazla gün farkı. */
+const DUPLICATE_DAYS = 3;
+
+/**
+ * Aynı kart, tür ve tutarda yakın tarihli bir kayıt arar.
+ * Aynı harcamayı iki kez girmek kolay olduğu için kaydetmeden önce uyarılır.
+ */
+function findDuplicate(payload, excludeId) {
+  const date = safeDate(payload.date);
+  if (!date) return null;
+
+  return Store.data.transactions.find(t => {
+    if (t.id === excludeId) return false;
+    if (t.cardId !== payload.cardId || t.type !== payload.type) return false;
+    if (Math.abs(t.amount - payload.amount) > 0.005) return false;
+    const td = safeDate(t.date);
+    if (!td) return false;
+    return Math.abs(td - date) <= DUPLICATE_DAYS * 86400000;
+  }) || null;
 }
 
 /**
@@ -158,6 +179,16 @@ export function newTransactionModal(presetCardId, editId) {
         date: new Date(dateI.value + 'T12:00:00').toISOString()
       };
 
+      const dup = findDuplicate(payload, editing && editing.id);
+      if (dup) {
+        const dupLabel = dup.description || (dup.type === 'expense' ? 'Harcama' : 'Ödeme');
+        const ok = confirm(
+          'Benzer bir kayıt zaten var:\n\n' +
+          dupLabel + ' — ' + fmtTL.format(dup.amount) + ' · ' + fmtDateSafe(dup.date) + '\n\n' +
+          'Aynı işlemi ikinci kez eklemek istediğinize emin misiniz?');
+        if (!ok) return;
+      }
+
       const saved = editing
         ? Store.updateTransaction(editing.id, payload)
         : Store.addTransaction(payload);
@@ -171,15 +202,32 @@ export function newTransactionModal(presetCardId, editId) {
   });
 }
 
-/** Onay alıp işlemi siler; çağıran taraf listeyi yeniler. */
-export function deleteTransactionWithConfirm(id) {
+/**
+ * İşlemi siler ve birkaç saniyelik "Geri al" seçeneği sunar.
+ * Onay penceresi yerine geri alma tercih edildi: tek tıkla silmek hızlı,
+ * yanlışlıkla silmek ise geri alınabilir kalıyor.
+ */
+export function deleteTransactionWithConfirm(id, onUndo) {
   const tx = Store.data.transactions.find(t => t.id === id);
   if (!tx) return false;
+
+  const snap = Store.snapshot();
   const label = tx.description || (tx.type === 'expense' ? 'Harcama' : 'Ödeme');
-  if (!confirm('"' + label + '" (' + fmtTL.format(tx.amount) + ') silinecek. Kart borcu yeniden hesaplanacak. Emin misiniz?')) return false;
 
   Store.deleteTransaction(id);
   renderAll();
-  toast('İşlem silindi, borç güncellendi.', 'warn');
+
+  toast('"' + label + '" (' + fmtTL.format(tx.amount) + ') silindi.', 'warn', {
+    duration: 7000,
+    action: {
+      label: 'Geri al',
+      onClick: () => {
+        Store.restore(snap);
+        renderAll();
+        if (onUndo) onUndo();
+        toast('İşlem geri getirildi.');
+      }
+    }
+  });
   return true;
 }

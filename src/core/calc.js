@@ -130,7 +130,8 @@ export const Calc = {
 
     const sums = new Map();
     Store.data.transactions.forEach(t => {
-      if (t.type !== 'expense') return;
+      // Düzeltme kayıtları gerçek harcama değildir, dağılımı çarpıtmasın
+      if (t.type !== 'expense' || t.isAdjustment) return;
       if (from) {
         const d = safeDate(t.date);
         if (!d || d < from) return;
@@ -152,6 +153,60 @@ export const Calc = {
       .sort((a, b) => b.amount - a.amount);
 
     return { items, total: Math.round(total * 100) / 100 };
+  },
+
+  /** Kart bazlı borç dağılımı (borcu olan kartlar, büyükten küçüğe). */
+  cardBreakdown() {
+    const items = Store.data.cards
+      .filter(c => c.currentDebt > 0)
+      .map(c => ({
+        id: c.id,
+        label: c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''),
+        amount: c.currentDebt,
+        color: c.color[1]
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    items.forEach(i => { i.share = total > 0 ? i.amount / total : 0; });
+    return { items, total: Math.round(total * 100) / 100 };
+  },
+
+  /**
+   * Yalnızca asgari ödeme yapılırsa borcun kapanma projeksiyonu.
+   * Her ay: faiz işler, ardından kalan borcun asgari oranı ödenir.
+   * Asgari ödeme faizi karşılamıyorsa borç büyür; bu durum ayrıca bildirilir.
+   */
+  payoffProjection(card, maxMonths = 360) {
+    const rate = card.interestRate;
+    if (!rate || rate <= 0 || card.currentDebt <= 0) return null;
+
+    let balance = card.currentDebt;
+    let totalInterest = 0;
+    let months = 0;
+
+    while (balance > 0.5 && months < maxMonths) {
+      const interest = balance * rate;
+      const withInterest = balance + interest;
+      const payment = withInterest * card.minPaymentRate;
+
+      // Ödeme faizi karşılamıyorsa borç hiç kapanmaz
+      if (payment <= interest + 0.005) {
+        return { months: null, totalInterest: null, neverEnds: true, firstPayment: Math.round(payment * 100) / 100 };
+      }
+
+      totalInterest += interest;
+      balance = withInterest - payment;
+      months += 1;
+    }
+
+    return {
+      months,
+      totalInterest: Math.round(totalInterest * 100) / 100,
+      totalPaid: Math.round((card.currentDebt + totalInterest) * 100) / 100,
+      neverEnds: false,
+      capped: months >= maxMonths
+    };
   },
 
   /** Bildirim listesi: eşik içinde son ödemesi olan borçlu kartlar. */

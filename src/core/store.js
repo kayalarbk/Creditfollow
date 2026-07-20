@@ -18,6 +18,7 @@ export const Store = {
     return {
       cards: [],
       transactions: [],
+      recurring: [],
       settings: {
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
         currency: 'TRY',
@@ -47,6 +48,8 @@ export const Store = {
         statementDay: day(c.statementDay),
         dueDay: day(c.dueDay),
         minPaymentRate: num(c.minPaymentRate, CONFIG.minPaymentRates[0]),
+        // Aylık akdi faiz oranı; 0 = faiz projeksiyonu gösterilmez
+        interestRate: Math.min(Math.max(num(c.interestRate, CONFIG.defaultInterestRate), 0), 1),
         color: Array.isArray(c.color) && c.color.length === 2 ? c.color : CONFIG.cardGradients[0],
         createdAt: safeDate(c.createdAt) ? c.createdAt : new Date().toISOString()
       }));
@@ -62,8 +65,25 @@ export const Store = {
         category: CONFIG.categories.some(c => c.id === t.category) ? t.category : 'diger',
         // Taksit yalnızca harcamada anlamlı; 1 = tek çekim
         installments: t.type === 'payment' ? 1 : Math.min(Math.max(parseInt(t.installments, 10) || 1, 1), 36),
+        // Mutabakat sırasında üretilen düzeltme kaydı
+        isAdjustment: t.isAdjustment === true,
+        // Tekrarlayan şablondan otomatik oluşturulmuş kayıt
+        isRecurring: t.isRecurring === true,
         // Okunamayan tarih null bırakılır; UI "Tarihsiz" gösterir, hesaplar bu kaydı atlar
         date: safeDate(t.date) ? t.date : null
+      }));
+
+    out.recurring = (Array.isArray(out.recurring) ? out.recurring : [])
+      .filter(r => r && typeof r === 'object' && cardIds.has(r.cardId) && num(r.amount) > 0)
+      .map(r => Object.assign({}, r, {
+        id: r.id || this.uid(),
+        amount: num(r.amount),
+        description: String(r.description || ''),
+        category: CONFIG.categories.some(c => c.id === r.category) ? r.category : 'diger',
+        dayOfMonth: day(r.dayOfMonth),
+        // Hangi aya kadar işlendiği: "YYYY-M" biçiminde, çift işlemeyi önler
+        lastRunPeriod: typeof r.lastRunPeriod === 'string' ? r.lastRunPeriod : null,
+        paused: r.paused === true
       }));
 
     // openingDebt eski yedeklerde yok: mevcut borçtan işlem etkilerini geri çıkararak türet
@@ -189,8 +209,98 @@ export const Store = {
     return this.save();
   },
 
+  /* ---------- tekrarlayan işlemler ---------- */
+
+  addRecurring(rec) {
+    rec.id = this.uid();
+    rec.createdAt = new Date().toISOString();
+    rec.lastRunPeriod = null;
+    rec.paused = false;
+    this.data.recurring.push(rec);
+    return this.save();
+  },
+
+  updateRecurring(id, patch) {
+    const r = this.data.recurring.find(x => x.id === id);
+    if (!r) return false;
+    Object.assign(r, patch);
+    return this.save();
+  },
+
+  deleteRecurring(id) {
+    this.data.recurring = this.data.recurring.filter(r => r.id !== id);
+    return this.save();
+  },
+
+  /**
+   * Vadesi gelmiş tekrarlayan işlemleri kaydeder ve oluşturulan sayıyı döner.
+   * lastRunPeriod ay bazında tutulduğu için uygulama gün içinde kaç kez açılırsa
+   * açılsın aynı ay için ikinci kez işlem üretilmez.
+   */
+  runRecurring(today = new Date()) {
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const period = y + '-' + m;
+    let created = 0;
+
+    this.data.recurring.forEach(r => {
+      if (r.paused || r.lastRunPeriod === period) return;
+
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      const dueDay = Math.min(r.dayOfMonth, lastDay);
+      if (today.getDate() < dueDay) return; // ayın günü henüz gelmedi
+
+      const card = this.data.cards.find(c => c.id === r.cardId);
+      if (!card) return;
+
+      this.data.transactions.push({
+        id: this.uid(),
+        cardId: r.cardId,
+        type: 'expense',
+        amount: r.amount,
+        category: r.category,
+        installments: 1,
+        isAdjustment: false,
+        isRecurring: true,
+        description: r.description,
+        date: new Date(y, m, dueDay, 12).toISOString(),
+        createdAt: new Date().toISOString()
+      });
+      r.lastRunPeriod = period;
+      created += 1;
+    });
+
+    if (created > 0) {
+      this.data.cards.forEach(c => this.recalcCard(c));
+      this.save();
+    }
+    return created;
+  },
+
   reset() {
     this.data = this.defaults();
+    return this.save();
+  },
+
+  /**
+   * Geri alınabilir bir anlık görüntü alır.
+   * Veri kümesi tarayıcıda tutulacak kadar küçük olduğu için tam kopya en güvenli yol;
+   * ters işlem üretmeye çalışmak yan etkileri (borç yeniden hesabı) kaçırabilir.
+   */
+  snapshot() {
+    return JSON.parse(JSON.stringify({
+      cards: this.data.cards,
+      transactions: this.data.transactions,
+      recurring: this.data.recurring
+    }));
+  },
+
+  /** snapshot() ile alınan durumu geri yükler. */
+  restore(snap) {
+    if (!snap) return false;
+    this.data.cards = snap.cards;
+    this.data.transactions = snap.transactions;
+    if (snap.recurring) this.data.recurring = snap.recurring;
     return this.save();
   }
 };

@@ -10,6 +10,7 @@ import { newCardModal } from './ui/modals/new-card.js';
 import { newTransactionModal } from './ui/modals/new-transaction.js';
 import { moveMonth } from './ui/views/calendar.js';
 import { bindTransactionFilters } from './ui/views/transactions.js';
+import { recurringModal } from './ui/modals/recurring.js';
 import { renderSettings } from './ui/views/settings.js';
 import { toast } from './ui/toast.js';
 
@@ -81,6 +82,7 @@ function bindCalendar() {
 }
 
 function bindSettings() {
+  byId('addRecurringBtn').addEventListener('click', () => recurringModal());
   byId('exportBtn').addEventListener('click', () => Backup.exportJSON());
   byId('exportCsvBtn').addEventListener('click', () => Backup.exportCSV());
   byId('importBtn').addEventListener('click', () => byId('importFile').click());
@@ -124,10 +126,19 @@ function bindSettings() {
 
   byId('resetBtn').addEventListener('click', () => {
     if (!confirm('TÜM veriler silinecek. Emin misiniz?')) return;
-    if (!confirm('Bu işlem geri alınamaz. Son kez onaylıyor musunuz?')) return;
+    if (!confirm('Son kez onaylıyor musunuz? (Sıfırlamanın hemen ardından geri alabilirsiniz)')) return;
+
+    const snap = Store.snapshot();
     Store.reset();
     renderAll();
     renderSettings(); // eşik ve yedek bilgisi varsayılana döner
-    toast('Tüm veriler sıfırlandı.', 'warn');
+
+    toast('Tüm veriler sıfırlandı.', 'warn', {
+      duration: 10000,
+      action: {
+        label: 'Geri al',
+        onClick: () => { Store.restore(snap); renderAll(); renderSettings(); toast('Verileriniz geri getirildi.'); }
+      }
+    });
   });
 }

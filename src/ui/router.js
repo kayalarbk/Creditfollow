@@ -41,6 +41,7 @@ export function renderAll() {
     Charts.renderDonut();
     Charts.renderTrend();
     Charts.renderCategory();
+    Charts.renderCardBreakdown();
     renderWidgets();
     renderCards();
     renderTransactions();

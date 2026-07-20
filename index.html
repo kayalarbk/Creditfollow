@@ -172,6 +172,20 @@
         </div>
       </div>
 
+      <!-- Kart bazında borç dağılımı -->
+      <div id="cardBreakdownCard" class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+        <div class="mb-4">
+          <h2 class="font-semibold">Kart bazında borç</h2>
+          <p id="cardBreakdownSub" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-5 items-center">
+          <div class="h-56">
+            <canvas id="cardBreakdownChart" aria-label="Kart bazında borç dağılımı grafiği" role="img"></canvas>
+          </div>
+          <div id="cardBreakdownLegend" class="space-y-2"></div>
+        </div>
+      </div>
+
       <!-- Kategori dağılımı -->
       <div id="categoryCard" class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
         <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -293,6 +307,17 @@
           <span id="autoBackupStatus" class="text-xs text-gray-400 dark:text-gray-500"></span>
         </div>
       </div>
+    </div>
+
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <h2 class="font-bold">Tekrarlayan işlemler</h2>
+        <button id="addRecurringBtn" class="h-9 px-3.5 rounded-lg bg-accent hover:bg-blue-600 text-white text-sm font-semibold transition-colors shrink-0">
+          <i class="fa-solid fa-plus mr-1.5"></i>Ekle
+        </button>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Abonelik ve faturalar gibi her ay tekrar eden harcamalar, ayın belirlediğiniz gününde otomatik kaydedilir.</p>
+      <div id="recurringList" class="space-y-2"></div>
     </div>
 
     <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">

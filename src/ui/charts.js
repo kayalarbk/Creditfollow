@@ -17,6 +17,7 @@ export const Charts = {
   donut: null,
   trend: null,
   category: null,
+  cardBreakdown: null,
   trendRange: 30,
   categoryRange: 30,
 
@@ -25,6 +26,7 @@ export const Charts = {
     if (this.donut) { this.donut.destroy(); this.donut = null; }
     if (this.trend) { this.trend.destroy(); this.trend = null; }
     if (this.category) { this.category.destroy(); this.category = null; }
+    if (this.cardBreakdown) { this.cardBreakdown.destroy(); this.cardBreakdown = null; }
   },
 
   renderTrend() {
@@ -144,7 +146,8 @@ export const Charts = {
       ? 'Toplam ' + fmtTL0.format(total) + ' · ' + items.length + ' kategori'
       : 'Bu aralıkta harcama yok.';
 
-    this._renderCatLegend(items, total);
+    this._renderSimpleLegend('categoryLegend', items,
+      'Harcama ekledikçe kategori dağılımınız burada görünür.');
 
     const data = {
       labels: items.map(i => i.label),
@@ -194,6 +197,62 @@ export const Charts = {
     });
   },
 
+  renderCardBreakdown() {
+    const ctx = byId('cardBreakdownChart');
+    if (!ctx) return;
+    const { items, total } = Calc.cardBreakdown();
+
+    byId('cardBreakdownSub').textContent = total > 0
+      ? 'Toplam ' + fmtTL0.format(total) + ' · ' + items.length + ' kartta borç var'
+      : 'Hiçbir kartınızda borç yok. 🎉';
+
+    this._renderSimpleLegend('cardBreakdownLegend', items,
+      'Borcu olan kartlarınız burada listelenir.');
+
+    const empty = items.length === 0;
+    const data = {
+      labels: empty ? ['Borç yok'] : items.map(i => i.label),
+      datasets: [{
+        data: empty ? [1] : items.map(i => i.amount),
+        backgroundColor: empty
+          ? [isDark() ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)']
+          : items.map(i => i.color),
+        borderWidth: 0,
+        borderRadius: items.length > 1 ? 6 : 0,
+        spacing: items.length > 1 ? 2 : 0
+      }]
+    };
+
+    if (this.cardBreakdown) {
+      this.cardBreakdown.data = data;
+      this.cardBreakdown.update();
+      return;
+    }
+
+    this.cardBreakdown = new Chart(ctx, {
+      type: 'doughnut',
+      data,
+      options: {
+        cutout: '62%',
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign({
+            callbacks: {
+              label: c => {
+                const { total: t } = Calc.cardBreakdown();
+                if (t <= 0) return ' Borç yok';
+                const pct = Math.round((c.parsed / t) * 100);
+                return ' ' + c.label + ': ' + fmtTL.format(c.parsed) + ' (%' + pct + ')';
+              }
+            }
+          }, TOOLTIP_STYLE)
+        }
+      }
+    });
+  },
+
   /* ---------- yardımcılar ---------- */
 
   _paintCatRangeButtons(dark) {
@@ -208,12 +267,14 @@ export const Charts = {
     });
   },
 
-  /** Grafiğin yanındaki kategori listesi — pay oranıyla birlikte. */
-  _renderCatLegend(items, total) {
-    const box = clear(byId('categoryLegend'));
+  /**
+   * Halka grafiğin yanındaki renk noktalı liste — pay oranıyla birlikte.
+   * items: [{ label, amount, color, share }]
+   */
+  _renderSimpleLegend(boxId, items, emptyText) {
+    const box = clear(byId(boxId));
     if (!items.length) {
-      box.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500',
-        'Harcama ekledikçe kategori dağılımınız burada görünür.'));
+      box.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500', emptyText));
       return;
     }
 

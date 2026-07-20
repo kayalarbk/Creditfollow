@@ -20,7 +20,16 @@ function init() {
     toast('Kayıtlı veriniz okunamadı. Ayarlar bölümünden yedeğinizi geri yükleyebilirsiniz.', 'danger');
   }
 
+  runRecurring();
   initAutoBackup();
+}
+
+/** Vadesi gelmiş tekrarlayan işlemleri kaydeder ve kullanıcıyı bilgilendirir. */
+function runRecurring() {
+  const created = Store.runRecurring();
+  if (created === 0) return;
+  renderAll();
+  toast(created + ' tekrarlayan işlem otomatik kaydedildi.', 'warn');
 }
 
 /** Otomatik yedek dosyası varsa bağlan; tarayıcı verisi boşsa dosyadan geri yükle. */
@@ -28,7 +37,10 @@ async function initAutoBackup() {
   const result = await AutoBackup.init();
   if (result === 'needs-permission') {
     toast('Otomatik yedek dosyanıza erişim izni gerekiyor. Ayarlar → "Yedek dosyasına bağlan" düğmesine tıklayın.', 'warn');
-  } else if (result && !applyAutoRestore(result)) {
+  } else if (result && applyAutoRestore(result)) {
+    // Geri yüklenen veri kümesi için tekrarlayanlar henüz değerlendirilmedi
+    runRecurring();
+  } else if (result) {
     // Geri yükleme gerekmedi: dosyayı güncel tarayıcı verisiyle eşitle
     AutoBackup.schedule(Store.data);
   }

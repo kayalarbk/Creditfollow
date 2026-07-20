@@ -15,21 +15,26 @@ export function buildTxRow(tx, opts = {}) {
 
   const row = el('div', 'group px-5 py-3.5 flex items-center gap-3.5 border-b border-black/5 dark:border-white/5 last:border-0');
 
-  /* Harcamada kategori ikonu ve rengi, ödemede sabit onay ikonu */
-  const cat = isExp ? category(tx.category) : null;
-  const ic = el('div', 'w-9 h-9 rounded-xl grid place-items-center shrink-0 ' + (isExp ? '' : 'bg-ok/10 text-ok'));
+  /* Düzeltme kaydı kendi ikonuyla, harcama kategori ikonuyla, ödeme onay ikonuyla gösterilir */
+  const adj = tx.isAdjustment === true;
+  const cat = isExp && !adj ? category(tx.category) : null;
+  const ic = el('div', 'w-9 h-9 rounded-xl grid place-items-center shrink-0 ' +
+    (adj ? 'bg-gray-500/10 text-gray-500 dark:text-gray-400' : isExp ? '' : 'bg-ok/10 text-ok'));
   if (cat) {
     ic.style.backgroundColor = cat.color + '1a';
     ic.style.color = cat.color;
   }
-  ic.appendChild(el('i', 'fa-solid ' + (cat ? cat.icon : 'fa-arrow-down') + ' text-sm'));
+  ic.appendChild(el('i', 'fa-solid ' +
+    (adj ? 'fa-scale-balanced' : cat ? cat.icon : 'fa-arrow-down') + ' text-sm'));
 
   const mid = el('div', 'flex-1 min-w-0');
-  const title = el('p', 'text-sm font-medium truncate', tx.description || (isExp ? cat.label : 'Ödeme'));
+  const title = el('p', 'text-sm font-medium truncate',
+    tx.description || (adj ? 'Borç düzeltmesi' : isExp ? cat.label : 'Ödeme'));
 
   const meta = el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate');
   const parts = [card ? card.bankName : 'Silinmiş kart', fmtDateSafe(tx.date)];
-  if (isExp) parts.splice(1, 0, cat.label);
+  if (adj) parts.splice(1, 0, 'Düzeltme');
+  else if (isExp) parts.splice(1, 0, cat.label);
   meta.textContent = parts.join(' · ');
   mid.append(title, meta);
 
@@ -49,7 +54,7 @@ export function buildTxRow(tx, opts = {}) {
       iconButton('fa-pen', 'İşlemi düzenle', 'hover:text-accent',
         () => newTransactionModal(tx.cardId, tx.id)),
       iconButton('fa-trash-can', 'İşlemi sil', 'hover:text-danger',
-        () => { if (deleteTransactionWithConfirm(tx.id) && onChange) onChange(); })
+        () => { if (deleteTransactionWithConfirm(tx.id, onChange) && onChange) onChange(); })
     );
     row.appendChild(wrap);
   }

@@ -7,6 +7,8 @@ import { buildTxRow } from '../tx-row.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 import { newTransactionModal } from './new-transaction.js';
+import { newCardModal } from './new-card.js';
+import { reconcileDebtModal } from './reconcile-debt.js';
 
 export function cardDetailModal(cardId) {
   const card = Store.data.cards.find(c => c.id === cardId);
@@ -62,6 +64,35 @@ export function cardDetailModal(cardId) {
     }
     body.appendChild(periodBox);
 
+    /* Sadece asgari ödenirse ne olur */
+    const proj = Calc.payoffProjection(card);
+    if (proj) {
+      const projBox = el('div', 'rounded-xl border border-warn/30 bg-warn/[.07] p-4 space-y-1.5');
+      projBox.appendChild(el('p', 'text-xs font-semibold text-yellow-700 dark:text-warn uppercase tracking-wider',
+        'Yalnızca asgari ödersen'));
+
+      if (proj.neverEnds) {
+        projBox.appendChild(el('p', 'text-sm font-medium',
+          'Bu borç asgari ödemeyle hiç kapanmaz — aylık faiz, asgari ödemeden büyük. Borcunuz her ay büyür.'));
+      } else {
+        const years = Math.floor(proj.months / 12);
+        const rest = proj.months % 12;
+        const sure = years > 0
+          ? years + ' yıl' + (rest > 0 ? ' ' + rest + ' ay' : '')
+          : proj.months + ' ay';
+
+        projBox.append(
+          el('p', 'text-sm', 'Borcun kapanması: ' + (proj.capped ? '30 yıldan uzun' : sure)),
+          el('p', 'text-sm', 'Ödenecek toplam faiz: ' + fmtTL.format(proj.totalInterest)),
+          el('p', 'text-sm font-semibold', 'Toplamda ödersin: ' + fmtTL.format(proj.totalPaid))
+        );
+      }
+      projBox.appendChild(el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+        'Aylık %' + String(Math.round(card.interestRate * 10000) / 100).replace('.', ',') +
+        ' faiz ve yeni harcama yapılmadığı varsayımıyla. Bilgi amaçlıdır, yatırım veya finans tavsiyesi değildir.'));
+      body.appendChild(projBox);
+    }
+
     /* Bu karta ait son işlemler */
     const txs = Store.data.transactions
       .filter(x => x.cardId === cardId)
@@ -77,20 +108,38 @@ export function cardDetailModal(cardId) {
     }
 
     /* Aksiyonlar */
-    const actions = el('div', 'grid grid-cols-2 gap-3 pt-2');
+    const secondary = 'h-11 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 font-semibold text-sm transition-colors';
+
     const addTx = el('button', 'h-11 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold text-sm transition-colors', 'İşlem ekle');
     addTx.addEventListener('click', () => { closeModal(); newTransactionModal(cardId); });
 
+    const edit = el('button', secondary, 'Kartı düzenle');
+    edit.addEventListener('click', () => { closeModal(); newCardModal(cardId); });
+
+    const reconcile = el('button', secondary, 'Borcu düzelt');
+    reconcile.addEventListener('click', () => { closeModal(); reconcileDebtModal(cardId); });
+
     const del = el('button', 'h-11 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger font-semibold text-sm transition-colors', 'Kartı sil');
     del.addEventListener('click', () => {
-      if (!confirm(card.bankName + ' kartı ve tüm işlemleri silinecek. Emin misiniz?')) return;
+      const txCount = Store.data.transactions.filter(t => t.cardId === cardId).length;
+      if (!confirm(card.bankName + ' kartı ve ' + txCount + ' işlemi silinecek. Emin misiniz?')) return;
+
+      const snap = Store.snapshot();
       Store.deleteCard(cardId);
       closeModal();
       renderAll();
-      toast('Kart silindi.', 'warn');
+
+      toast(card.bankName + ' kartı silindi.', 'warn', {
+        duration: 8000,
+        action: {
+          label: 'Geri al',
+          onClick: () => { Store.restore(snap); renderAll(); toast('Kart ve işlemleri geri getirildi.'); }
+        }
+      });
     });
 
-    actions.append(addTx, del);
+    const actions = el('div', 'grid grid-cols-2 gap-3 pt-2');
+    actions.append(addTx, edit, reconcile, del);
     body.appendChild(actions);
     box.appendChild(body);
   });
