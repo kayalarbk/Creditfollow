@@ -27,6 +27,41 @@ export const Calc = {
     return Math.round((date - this.today()) / 86400000);
   },
 
+  /** Verilen ay-günün bugünden önceki en son gerçekleşme tarihi. */
+  lastOccurrence(dayOfMonth, from = this.today()) {
+    const y = from.getFullYear(), m = from.getMonth();
+    let d = new Date(y, m, this.clampDay(y, m, dayOfMonth));
+    if (d > from) {
+      const pm = m - 1 < 0 ? 11 : m - 1;
+      const py = m - 1 < 0 ? y - 1 : y;
+      d = new Date(py, pm, this.clampDay(py, pm, dayOfMonth));
+    }
+    return d;
+  },
+
+  /**
+   * Gecikmiş ödeme bilgisi.
+   * nextOccurrence her zaman ileri bir tarih döndürdüğü için gecikme ondan anlaşılamaz;
+   * son ödeme günü geçmiş ve o günden bu yana hiç ödeme yapılmamışsa gecikme sayılır.
+   * Dönüş: null (gecikme yok) | { due, days }
+   */
+  overdueInfo(card) {
+    if (card.currentDebt <= 0) return null;
+
+    const due = this.lastOccurrence(card.dueDay);
+    const today = this.today();
+    if (due >= today) return null; // son ödeme günü henüz gelmedi/bugün
+
+    const paidSince = Store.data.transactions.some(t => {
+      if (t.cardId !== card.id || t.type !== 'payment') return false;
+      const d = safeDate(t.date);
+      return d && d >= due;
+    });
+    if (paidSince) return null;
+
+    return { due, days: Math.round((today - due) / 86400000) };
+  },
+
   minPayment(card) {
     return Math.round(card.currentDebt * card.minPaymentRate * 100) / 100;
   },
@@ -209,16 +244,21 @@ export const Calc = {
     };
   },
 
-  /** Bildirim listesi: eşik içinde son ödemesi olan borçlu kartlar. */
+  /**
+   * Bildirim listesi: gecikmiş ödemeler ve eşik içinde yaklaşan son ödemeler.
+   * Gecikmişler negatif gün değeriyle en üstte sıralanır.
+   */
   notifications() {
     const threshold = Store.data.settings.notificationThresholdDays;
     return Store.data.cards
       .filter(c => c.currentDebt > 0)
       .map(c => {
+        const overdue = this.overdueInfo(c);
+        if (overdue) return { card: c, due: overdue.due, days: -overdue.days, overdue: true };
         const due = this.nextOccurrence(c.dueDay);
-        return { card: c, due, days: this.daysUntil(due) };
+        return { card: c, due, days: this.daysUntil(due), overdue: false };
       })
-      .filter(n => n.days <= threshold)
+      .filter(n => n.overdue || n.days <= threshold)
       .sort((a, b) => a.days - b.days);
   },
 

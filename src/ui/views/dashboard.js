@@ -50,7 +50,8 @@ function buildCard(card) {
   const color = Calc.usageColor(ratio);
   const statement = Calc.nextOccurrence(card.statementDay);
   const due = Calc.nextOccurrence(card.dueDay);
-  const overdue = card.currentDebt > 0 && Calc.daysUntil(due) <= Store.data.settings.notificationThresholdDays;
+  const late = Calc.overdueInfo(card);
+  const soon = card.currentDebt > 0 && Calc.daysUntil(due) <= Store.data.settings.notificationThresholdDays;
 
   const wrap = el('article', 'fade-in rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark overflow-hidden hover:-translate-y-0.5 hover:shadow-pop transition-all duration-300 cursor-pointer');
   wrap.setAttribute('role', 'button');
@@ -105,8 +106,18 @@ function buildCard(card) {
     stat('Limit', fmtTL0.format(card.limit)),
     stat('Kullanılabilir', fmtTL0.format(Math.max(card.limit - card.currentDebt, 0))),
     stat('Hesap kesim', fmtDateShort.format(statement)),
-    stat('Son ödeme', fmtDateShort.format(due), overdue ? 'text-danger' : '')
+    stat('Son ödeme', fmtDateShort.format(due), late || soon ? 'text-danger' : '')
   );
+
+  if (late) {
+    const warn = el('div', 'flex items-center gap-2 rounded-lg bg-danger/10 text-danger px-2.5 py-2 text-xs font-semibold');
+    warn.append(
+      el('i', 'fa-solid fa-triangle-exclamation'),
+      el('span', '', late.days + ' gündür ödeme yapılmadı')
+    );
+    stats.appendChild(warn);
+    warn.classList.add('col-span-2');
+  }
 
   const minRow = el('div', 'flex items-center justify-between text-xs pt-1');
   minRow.append(

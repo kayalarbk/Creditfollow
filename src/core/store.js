@@ -40,7 +40,7 @@ export const Store = {
 
     out.cards = (Array.isArray(out.cards) ? out.cards : [])
       .filter(c => c && typeof c === 'object')
-      .map(c => Object.assign({}, c, {
+      .map((c, i) => Object.assign({}, c, {
         id: c.id || this.uid(),
         bankName: String(c.bankName || 'Bilinmeyen banka'),
         limit: num(c.limit),

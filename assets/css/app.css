@@ -34,6 +34,22 @@ body { font-feature-settings: 'cv02','cv03','cv04','cv11'; }
 .cal-dot { width: 7px; height: 7px; border-radius: 9999px; }
 .bank-card { background: linear-gradient(135deg, var(--bc1), var(--bc2)); }
 
+/* Klavye kısayolu rozeti */
+.kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 .4rem;
+  border-radius: .5rem;
+  font-size: .75rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: rgba(0,0,0,.05);
+  border-bottom: 2px solid rgba(0,0,0,.12);
+}
+.dark .kbd { background: rgba(255,255,255,.1); border-bottom-color: rgba(255,255,255,.18); }
+
 input[type=number]::-webkit-inner-spin-button { opacity: .4; }
 button, [role=button] { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid #0A84FF; outline-offset: 2px; border-radius: 6px; }

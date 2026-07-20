@@ -23,6 +23,48 @@ export function bindEvents() {
   bindCalendar();
   bindTransactionFilters();
   bindSettings();
+  bindShortcuts();
+}
+
+/** Modal açıkken ve yazı yazarken kısayollar devre dışıdır. */
+function isTyping() {
+  const a = document.activeElement;
+  if (!a) return false;
+  return a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA' || a.isContentEditable;
+}
+
+function bindShortcuts() {
+  const views = { '1': 'dashboard', '2': 'transactions', '3': 'calendar', '4': 'settings' };
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (isTyping()) return;
+    if (!byId('modal').classList.contains('hidden')) return; // Escape'i bindModal yönetir
+
+    const key = e.key;
+
+    if (views[key]) {
+      e.preventDefault();
+      switchView(views[key]);
+      return;
+    }
+
+    switch (key.toLowerCase()) {
+      case 'n':
+        e.preventDefault();
+        newTransactionModal();
+        break;
+      case 'k':
+        e.preventDefault();
+        newCardModal();
+        break;
+      case '/':
+        e.preventDefault();
+        switchView('transactions');
+        byId('txSearch').focus();
+        break;
+    }
+  });
 }
 
 function bindNav() {

@@ -1,11 +1,26 @@
 import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
 import { el, byId, clear } from '../../utils/dom.js';
-import { fmtTL, dateSort } from '../../utils/format.js';
+import { fmtTL, dateSort, safeDate } from '../../utils/format.js';
 import { buildTxRow } from '../tx-row.js';
 
 /** Aktif filtreler — görünüm değişse de korunur. */
-const filters = { search: '', cardId: '', type: '', category: '' };
+const filters = { search: '', cardId: '', type: '', category: '', range: '' };
+
+/** Seçili aralığın başlangıç tarihi; '' ise sınır yok. */
+function rangeStart() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  if (filters.range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (filters.range === 'year') return new Date(now.getFullYear(), 0, 1);
+  if (filters.range === '90') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 89);
+    return d;
+  }
+  return null;
+}
 
 /** Filtre kutularını doldurur ve olaylara bağlar (bir kez, açılışta). */
 export function bindTransactionFilters() {
@@ -13,6 +28,7 @@ export function bindTransactionFilters() {
   const card = byId('txFilterCard');
   const type = byId('txFilterType');
   const cat = byId('txFilterCat');
+  const range = byId('txFilterRange');
 
   const catPlaceholder = el('option', '', 'Tüm kategoriler');
   catPlaceholder.value = '';
@@ -27,10 +43,11 @@ export function bindTransactionFilters() {
   card.addEventListener('change', () => { filters.cardId = card.value; renderTransactionsView(); });
   type.addEventListener('change', () => { filters.type = type.value; renderTransactionsView(); });
   cat.addEventListener('change', () => { filters.category = cat.value; renderTransactionsView(); });
+  range.addEventListener('change', () => { filters.range = range.value; renderTransactionsView(); });
 
   byId('txClearFilters').addEventListener('click', () => {
-    filters.search = filters.cardId = filters.type = filters.category = '';
-    search.value = ''; card.value = ''; type.value = ''; cat.value = '';
+    filters.search = filters.cardId = filters.type = filters.category = filters.range = '';
+    search.value = ''; card.value = ''; type.value = ''; cat.value = ''; range.value = '';
     renderTransactionsView();
   });
 }
@@ -57,11 +74,18 @@ function syncCardOptions() {
 
 function applyFilters() {
   const q = filters.search.toLocaleLowerCase('tr-TR');
+  const from = rangeStart();
+
   return Store.data.transactions.filter(t => {
     if (filters.cardId && t.cardId !== filters.cardId) return false;
     if (filters.type && t.type !== filters.type) return false;
     if (filters.category && (t.category || 'diger') !== filters.category) return false;
     if (q && !(t.description || '').toLocaleLowerCase('tr-TR').includes(q)) return false;
+    if (from) {
+      const d = safeDate(t.date);
+      // Tarihsiz kayıtlar bir aralığa yerleştirilemez
+      if (!d || d < from) return false;
+    }
     return true;
   }).sort((a, b) => dateSort(b.date) - dateSort(a.date));
 }

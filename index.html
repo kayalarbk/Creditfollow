@@ -244,7 +244,13 @@
           <option value="expense">Harcama</option>
           <option value="payment">Ödeme</option>
         </select>
-        <select id="txFilterCat" class="h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent col-span-2 sm:col-span-1"></select>
+        <select id="txFilterCat" class="h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent"></select>
+        <select id="txFilterRange" class="h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 text-sm font-medium focus:ring-2 focus:ring-accent col-span-2 sm:col-span-3">
+          <option value="">Tüm zamanlar</option>
+          <option value="month">Bu ay</option>
+          <option value="90">Son 3 ay</option>
+          <option value="year">Bu yıl</option>
+        </select>
       </div>
       <div id="txSummary" class="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400 num"></div>
     </div>
@@ -327,6 +333,29 @@
         <input id="thresholdInput" type="number" min="1" max="15" class="w-24 h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 focus:ring-2 focus:ring-accent num font-semibold">
         <span class="text-sm text-gray-500 dark:text-gray-400">gün önce</span>
         <button id="thresholdSave" class="ml-auto h-10 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors">Kaydet</button>
+      </div>
+    </div>
+
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <h2 class="font-bold mb-1">Klavye kısayolları</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Bir alana yazarken veya pencere açıkken kısayollar devre dışıdır.</p>
+      <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">Harcama / ödeme ekle</span><kbd class="kbd">N</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">Yeni kart ekle</span><kbd class="kbd">K</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">İşlemlerde ara</span><kbd class="kbd">/</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">Pencereyi kapat</span><kbd class="kbd">Esc</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">Görünümler</span>
+          <span class="flex gap-1"><kbd class="kbd">1</kbd><kbd class="kbd">2</kbd><kbd class="kbd">3</kbd><kbd class="kbd">4</kbd></span>
+        </div>
       </div>
     </div>
 

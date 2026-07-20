@@ -1,6 +1,7 @@
 import { Calc } from '../core/calc.js';
 import { el, byId, clear } from '../utils/dom.js';
 import { fmtTL, fmtDate } from '../utils/format.js';
+import { cardDetailModal } from './modals/card-detail.js';
 
 /** Üst bardaki bildirim çanı: rozet + açılır liste. */
 export function renderBell() {
@@ -22,11 +23,16 @@ export function renderBell() {
   }
 
   notifs.forEach(n => {
-    const overdue = n.days < 0;
-    const row = el('div', 'px-4 py-3 flex items-start gap-3 border-b border-black/5 dark:border-white/5 last:border-0');
+    const overdue = n.overdue;
+    const row = el('button', 'w-full text-left px-4 py-3 flex items-start gap-3 border-b border-black/5 dark:border-white/5 last:border-0 hover:bg-black/5 dark:hover:bg-white/5 transition-colors');
+    row.addEventListener('click', () => {
+      byId('bellPanel').classList.add('hidden');
+      cardDetailModal(n.card.id);
+    });
     const dot = el('div', 'mt-1 w-2.5 h-2.5 rounded-full shrink-0 ' + (overdue || n.days <= 1 ? 'bg-danger' : 'bg-warn'));
 
-    const suffix = overdue ? ' — GECİKTİ'
+    const gecikme = -n.days;
+    const suffix = overdue ? ' — ' + gecikme + ' GÜN GECİKTİ'
       : n.days === 0 ? ' — son ödeme bugün'
       : ' — son ödemeye ' + n.days + ' gün';
     const title = el('p', 'text-sm font-semibold truncate', n.card.bankName + suffix);
