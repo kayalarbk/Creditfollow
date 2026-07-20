@@ -67,6 +67,13 @@ export function cardDetailModal(cardId) {
         stRow('Kesimden beri ödenen', fmtTL.format(st.paidSince), 'text-ok')
       );
 
+      // Taksitliler yüzünden güncel borç ekstre borcundan büyük olabilir
+      if (card.currentDebt - st.remainingAll > 0.5) {
+        stBox.appendChild(el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+          'Güncel borcun ' + fmtTL.format(card.currentDebt - st.remainingAll) +
+          '’lik kısmı henüz ekstreye yansımadı (kesim sonrası harcamalar ve gelecek taksitler).'));
+      }
+
       if (st.isFullPaid) {
         stBox.appendChild(el('p', 'text-sm font-bold text-ok', '✓ Ekstre borcunun tamamı ödendi.'));
       } else if (st.isMinPaid) {

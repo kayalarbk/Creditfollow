@@ -82,6 +82,29 @@ export const Calc = {
   },
 
   /**
+   * Bir harcamanın verilen kesim tarihine kadar ekstreye yansımış tutarı.
+   *
+   * Taksitli harcamada limitin tamamı anında bloke olur (güncel borç),
+   * ancak ekstreye her dönem yalnızca bir taksit yansır. İlk taksit,
+   * harcamadan sonraki ilk kesimde ekstreye girer.
+   */
+  billedAmount(tx, card, cutoff) {
+    const n = tx.installments || 1;
+    if (n <= 1) return tx.amount;
+
+    const d = safeDate(tx.date);
+    if (!d) return 0;
+
+    const firstBilling = this.nextOccurrence(card.statementDay, d);
+    const monthsBilled =
+      (cutoff.getFullYear() - firstBilling.getFullYear()) * 12 +
+      (cutoff.getMonth() - firstBilling.getMonth()) + 1;
+
+    const billed = Math.min(Math.max(monthsBilled, 0), n);
+    return Math.round((tx.amount / n) * billed * 100) / 100;
+  },
+
+  /**
    * Kesilmiş son ekstrenin özeti.
    *
    * Asgari ödeme, kartın anlık borcunun değil ekstre kesiminde donmuş
@@ -112,8 +135,12 @@ export const Calc = {
       if (t.cardId !== card.id) return;
       const d = safeDate(t.date);
       if (!d) return;
-      if (d <= endOfCutoff) balance += t.type === 'expense' ? t.amount : -t.amount;
-      else if (t.type === 'payment') paidSince += t.amount;
+      if (d <= endOfCutoff) {
+        // Taksitli harcamanın yalnızca ekstreye yansımış taksitleri borca girer
+        balance += t.type === 'expense' ? this.billedAmount(t, card, cutoff) : -t.amount;
+      } else if (t.type === 'payment') {
+        paidSince += t.amount;
+      }
     });
 
     const round = v => Math.round(v * 100) / 100;
