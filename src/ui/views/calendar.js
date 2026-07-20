@@ -78,6 +78,15 @@ function buildDots(evs, isToday) {
   return dots;
 }
 
+/** Son ödeme günü satırının açıklaması — asgari ödendiyse bunu belirtir. */
+function dueSummary(card) {
+  const st = Calc.statementSummary(card);
+  if (!st.hasStatement) return 'Bu dönem için kesilmiş ekstre borcu yok.';
+  if (st.isFullPaid) return 'Ekstre borcunun tamamı ödendi.';
+  if (st.isMinPaid) return 'Asgari ödendi · kalan ekstre borcu: ' + fmtTL.format(st.remainingAll);
+  return 'Kalan asgari: ' + fmtTL.format(st.remainingMin) + ' · ekstre borcu: ' + fmtTL.format(st.balance);
+}
+
 /** Seçilen günün altındaki detay paneli. */
 function renderCalDetail(evs, date) {
   const panel = clear(byId('calDetail'));
@@ -91,8 +100,7 @@ function renderCalDetail(evs, date) {
     box.append(
       el('p', 'text-sm font-semibold truncate', ev.card.bankName + ' — ' + (isDue ? 'Son ödeme günü' : 'Hesap kesim günü')),
       isDue
-        ? el('p', 'text-xs text-gray-500 dark:text-gray-400 num',
-            'Toplam borç: ' + fmtTL.format(ev.card.currentDebt) + ' · Asgari: ' + fmtTL.format(Calc.minPayment(ev.card)))
+        ? el('p', 'text-xs text-gray-500 dark:text-gray-400 num', dueSummary(ev.card))
         : el('p', 'text-xs text-gray-500 dark:text-gray-400', 'Bu tarihte dönem borcu hesaplanır.')
     );
     row.append(el('span', 'cal-dot shrink-0 ' + (isDue ? 'bg-danger' : 'bg-warn')), box);

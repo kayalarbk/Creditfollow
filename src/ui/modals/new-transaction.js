@@ -1,7 +1,7 @@
 import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
 import { Calc } from '../../core/calc.js';
-import { el } from '../../utils/dom.js';
+import { el, clear } from '../../utils/dom.js';
 import { fmtTL, fmtDateSafe, parseAmount, safeDate } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
 import { renderAll } from '../router.js';
@@ -130,19 +130,61 @@ export function newTransactionModal(presetCardId, editId) {
     instSelect.addEventListener('change', updateInstHint);
     amount.addEventListener('input', updateInstHint);
 
-    /* Ödemede kategori/taksit gizlenir */
+    /* Ödemede: seçili kartın kesilmiş ekstresi ve tek tıkla tutar doldurma */
+    const payHelp = el('div', 'rounded-xl bg-black/[.03] dark:bg-white/5 p-3 space-y-2');
+
+    const fillButton = (label, value) => {
+      const b = el('button', 'flex-1 h-9 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-colors', label);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        amount.value = String(value).replace('.', ',');
+        updateInstHint();
+      });
+      return b;
+    };
+
+    const renderPayHelp = () => {
+      clear(payHelp);
+      const card = Store.data.cards.find(c => c.id === cardSelect.value);
+      if (!card) return;
+
+      const st = Calc.statementSummary(card);
+      if (!st.hasStatement) {
+        payHelp.appendChild(el('p', 'text-xs text-gray-500 dark:text-gray-400',
+          'Bu kartın kesilmiş ekstre borcu yok. Yaptığınız ödeme güncel borçtan düşülür.'));
+        return;
+      }
+
+      payHelp.appendChild(el('p', 'text-xs text-gray-500 dark:text-gray-400',
+        st.isFullPaid
+          ? 'Bu ekstrenin tamamı ödendi.'
+          : st.isMinPaid
+            ? 'Asgari ödendi. Kalan ekstre borcu: ' + fmtTL.format(st.remainingAll)
+            : 'Kalan asgari: ' + fmtTL.format(st.remainingMin) +
+              ' · kalan ekstre borcu: ' + fmtTL.format(st.remainingAll)));
+
+      const row = el('div', 'flex gap-2');
+      if (st.remainingMin > 0) row.appendChild(fillButton('Asgariyi yaz (' + fmtTL.format(st.remainingMin) + ')', st.remainingMin));
+      if (st.remainingAll > 0) row.appendChild(fillButton('Tamamını yaz (' + fmtTL.format(st.remainingAll) + ')', st.remainingAll));
+      if (row.children.length) payHelp.appendChild(row);
+    };
+
     const paintExpenseOnly = () => {
       const isExp = txType === 'expense';
       catField.classList.toggle('hidden', !isExp);
       instField.classList.toggle('hidden', !isExp);
+      payHelp.classList.toggle('hidden', isExp);
+      if (!isExp) renderPayHelp();
     };
     [tExp, tPay].forEach(b => b.addEventListener('click', paintExpenseOnly));
+    cardSelect.addEventListener('change', () => { if (txType === 'payment') renderPayHelp(); });
 
     const submit = primaryButton(editing ? 'Değişikliği kaydet' : 'İşlemi kaydet');
     body.append(
       field('Kart', cardSelect),
       field('İşlem türü', typeWrap),
       field('Tutar (₺)', amount, 'err-amt'),
+      payHelp,
       catField,
       instField,
       field('Açıklama', desc),

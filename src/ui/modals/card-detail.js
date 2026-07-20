@@ -25,13 +25,61 @@ export function cardDetailModal(cardId) {
       d.append(el('p', 'text-xs text-gray-500 dark:text-gray-400', l), el('p', 'font-bold num', v));
       return d;
     };
+    const st = Calc.statementSummary(card);
     summary.append(
       stat('Güncel borç', fmtTL.format(card.currentDebt)),
       stat('Limit', fmtTL0.format(card.limit)),
-      stat('Asgari ödeme', fmtTL.format(Calc.minPayment(card))),
-      stat('Son ödeme', fmtDate.format(Calc.nextOccurrence(card.dueDay)))
+      stat('Kalan asgari', st.hasStatement ? fmtTL.format(st.remainingMin) : '—'),
+      stat('Son ödeme', st.hasStatement
+        ? fmtDate.format(st.dueDate)
+        : fmtDate.format(Calc.nextOccurrence(card.dueDay)))
     );
     body.appendChild(summary);
+
+    /* Kesilmiş ekstre: asgari bu tutar üzerinden sabitlenir, ödendikçe azalır */
+    const stBox = el('div', 'rounded-xl p-4 space-y-2 ' + (
+      !st.hasStatement ? 'bg-black/[.03] dark:bg-white/5'
+        : st.isMinPaid ? 'border border-ok/30 bg-ok/[.07]'
+        : 'border border-warn/30 bg-warn/[.07]'
+    ));
+    const stRow = (label, value, cls) => {
+      const r = el('div', 'flex items-center justify-between text-sm gap-3');
+      r.append(el('span', 'text-gray-600 dark:text-gray-300', label),
+        el('span', 'font-semibold num text-right ' + (cls || ''), value));
+      return r;
+    };
+
+    stBox.appendChild(el('p', 'text-xs font-semibold uppercase tracking-wider ' + (
+      !st.hasStatement ? 'text-gray-500 dark:text-gray-400'
+        : st.isMinPaid ? 'text-ok' : 'text-yellow-700 dark:text-warn'
+    ), 'Kesilmiş ekstre'));
+
+    if (!st.hasStatement) {
+      stBox.appendChild(el('p', 'text-sm text-gray-500 dark:text-gray-400',
+        'Bu kartın ödenmesi gereken kesilmiş ekstresi yok. Bir sonraki kesim: ' +
+        fmtDate.format(Calc.nextOccurrence(card.statementDay)) + '.'));
+    } else {
+      stBox.append(
+        el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+          fmtDateShort.format(st.cutoff) + ' kesimi · son ödeme ' + fmtDate.format(st.dueDate)),
+        stRow('Ekstre borcu', fmtTL.format(st.balance)),
+        stRow('Asgari ödeme (%' + Math.round(card.minPaymentRate * 100) + ')', fmtTL.format(st.minPayment)),
+        stRow('Kesimden beri ödenen', fmtTL.format(st.paidSince), 'text-ok')
+      );
+
+      if (st.isFullPaid) {
+        stBox.appendChild(el('p', 'text-sm font-bold text-ok', '✓ Ekstre borcunun tamamı ödendi.'));
+      } else if (st.isMinPaid) {
+        stBox.append(
+          el('p', 'text-sm font-bold text-ok', '✓ Asgari ödeme karşılandı.'),
+          el('p', 'text-xs text-gray-500 dark:text-gray-400',
+            'Kalan ' + fmtTL.format(st.remainingAll) + ' için faiz işleyebilir.')
+        );
+      } else {
+        stBox.appendChild(stRow('Kalan asgari', fmtTL.format(st.remainingMin), 'text-danger font-bold'));
+      }
+    }
+    body.appendChild(stBox);
 
     /* Bu ekstre dönemi */
     const period = Calc.periodActivity(card);

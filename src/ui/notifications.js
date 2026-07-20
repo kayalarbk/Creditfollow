@@ -9,14 +9,16 @@ export function renderBell() {
   const badge = byId('bellBadge');
   const list = clear(byId('bellList'));
 
-  badge.classList.toggle('hidden', notifs.length === 0);
-  badge.textContent = notifs.length;
+  // Rozet acil olanları sayar; liste bekleyen tüm ekstreleri gösterir
+  const urgent = notifs.filter(n => n.urgent).length;
+  badge.classList.toggle('hidden', urgent === 0);
+  badge.textContent = urgent;
 
   if (notifs.length === 0) {
     const ok = el('div', 'px-4 py-8 text-center');
     ok.append(
       el('i', 'fa-solid fa-circle-check text-ok text-2xl mb-2'),
-      el('p', 'text-sm text-gray-500 dark:text-gray-400', 'Yaklaşan ödeme yok. Her şey yolunda!')
+      el('p', 'text-sm text-gray-500 dark:text-gray-400', 'Bekleyen ödeme yok. Her şey yolunda!')
     );
     list.appendChild(ok);
     return;
@@ -29,7 +31,10 @@ export function renderBell() {
       byId('bellPanel').classList.add('hidden');
       cardDetailModal(n.card.id);
     });
-    const dot = el('div', 'mt-1 w-2.5 h-2.5 rounded-full shrink-0 ' + (overdue || n.days <= 1 ? 'bg-danger' : 'bg-warn'));
+    // Acil olmayanlar (kesilmiş ama son ödemesi uzak) daha sönük bir noktayla ayrılır
+    const dot = el('div', 'mt-1 w-2.5 h-2.5 rounded-full shrink-0 ' + (
+      overdue || n.days <= 1 ? 'bg-danger' : n.urgent ? 'bg-warn' : 'bg-gray-300 dark:bg-gray-600'
+    ));
 
     const gecikme = -n.days;
     const suffix = overdue ? ' — ' + gecikme + ' GÜN GECİKTİ'
@@ -42,7 +47,7 @@ export function renderBell() {
     box.append(
       title,
       el('p', 'text-xs text-gray-500 dark:text-gray-400 num',
-        'Asgari: ' + fmtTL.format(Calc.minPayment(n.card)) + ' · Toplam: ' + fmtTL.format(n.card.currentDebt)),
+        'Kalan asgari: ' + fmtTL.format(n.amount) + ' · Toplam borç: ' + fmtTL.format(n.card.currentDebt)),
       el('p', 'text-[11px] text-gray-400 dark:text-gray-500', fmtDate.format(n.due))
     );
 

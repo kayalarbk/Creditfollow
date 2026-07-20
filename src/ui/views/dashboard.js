@@ -17,12 +17,16 @@ export function renderWidgets() {
     wUp.textContent = 'Ödeme yok';
     wUpSub.textContent = 'Önümüzdeki 7 gün temiz 🎉';
   } else {
-    wUp.textContent = up.length + ' kart · ' + fmtTL0.format(up.reduce((s, n) => s + n.card.currentDebt, 0));
+    // Yaklaşan yük, kartın tüm borcu değil ödenmesi gereken kalan asgaridir
+    wUp.textContent = up.length + ' kart · ' + fmtTL0.format(up.reduce((s, n) => s + n.amount, 0));
     const first = up[0];
     wUpSub.textContent = 'En yakın: ' + first.card.bankName + ' — ' + (first.days === 0 ? 'bugün' : first.days + ' gün sonra');
   }
 
   byId('wMinPay').textContent = fmtTL.format(t.minPay);
+  byId('wMinPaySub').textContent = t.minPayCards === 0
+    ? 'Ödenecek asgari yok'
+    : t.minPayCards + ' kartın kesilmiş ekstresi için';
 
   const pct = Math.round(t.usage * 100);
   byId('wUsage').textContent = '%' + pct;
@@ -157,11 +161,32 @@ function buildCard(card) {
     warn.classList.add('col-span-2');
   }
 
-  const minRow = el('div', 'flex items-center justify-between text-xs pt-1');
-  minRow.append(
-    el('span', 'text-gray-500 dark:text-gray-400', 'Asgari ödeme (%' + Math.round(card.minPaymentRate * 100) + ')'),
-    el('span', 'font-bold num', fmtTL.format(Calc.minPayment(card)))
-  );
+  /* Asgari ödeme, ekstre kesilince sabitlenir; ödendikçe azalır */
+  const st = Calc.statementSummary(card);
+  const minRow = el('div', 'flex items-center justify-between text-xs pt-1 gap-2');
+
+  if (!st.hasStatement) {
+    minRow.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Asgari ödeme'),
+      el('span', 'font-semibold text-gray-400 dark:text-gray-500', 'Ekstre kesilmedi')
+    );
+  } else if (st.isFullPaid) {
+    minRow.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Ekstre borcu'),
+      el('span', 'font-bold text-ok', '✓ Tamamı ödendi')
+    );
+  } else if (st.isMinPaid) {
+    minRow.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Asgari ödeme'),
+      el('span', 'font-bold text-ok', '✓ Ödendi')
+    );
+  } else {
+    minRow.append(
+      el('span', 'text-gray-500 dark:text-gray-400',
+        'Kalan asgari (%' + Math.round(card.minPaymentRate * 100) + ')'),
+      el('span', 'font-bold num', fmtTL.format(st.remainingMin))
+    );
+  }
 
   body.append(barWrap, stats, minRow);
 

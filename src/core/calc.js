@@ -48,27 +48,18 @@ export const Calc = {
   overdueInfo(card) {
     if (card.currentDebt <= 0) return null;
 
-    const due = this.lastOccurrence(card.dueDay);
+    const st = this.statementSummary(card);
     const today = this.today();
-    if (due >= today) return null; // son ödeme günü henüz gelmedi/bugün
 
-    // O tarihte ödenecek bir borç var mıydı? Borç sonradan oluştuysa gecikme sayılmaz.
-    const endOfDue = new Date(due);
-    endOfDue.setHours(23, 59, 59, 999);
-    let balanceAtDue = card.openingDebt || 0;
-    let paidSince = false;
+    // Ekstre yoksa ya da asgari karşılandıysa gecikme yoktur
+    if (!st.hasStatement || st.isMinPaid) return null;
+    if (st.dueDate >= today) return null; // son ödeme günü henüz gelmedi/bugün
 
-    Store.data.transactions.forEach(t => {
-      if (t.cardId !== card.id) return;
-      const d = safeDate(t.date);
-      if (!d) return;
-      if (d <= endOfDue) balanceAtDue += t.type === 'expense' ? t.amount : -t.amount;
-      if (t.type === 'payment' && d >= due) paidSince = true;
-    });
-
-    if (balanceAtDue <= 0.005 || paidSince) return null;
-
-    return { due, days: Math.round((today - due) / 86400000), amount: Math.round(balanceAtDue * 100) / 100 };
+    return {
+      due: st.dueDate,
+      days: Math.round((today - st.dueDate) / 86400000),
+      amount: st.remainingMin
+    };
   },
 
   /**
@@ -90,8 +81,67 @@ export const Calc = {
     }, 0);
   },
 
+  /**
+   * Kesilmiş son ekstrenin özeti.
+   *
+   * Asgari ödeme, kartın anlık borcunun değil ekstre kesiminde donmuş
+   * dönem borcunun yüzdesidir: kesimden sonra yapılan harcamalar bu ayın
+   * asgarisini artırmaz, yapılan ödemeler ise kalan asgariyi azaltır.
+   *
+   * Dönüş:
+   *   hasStatement  — kesilmiş ve tutarı olan bir ekstre var mı
+   *   cutoff        — son hesap kesim tarihi
+   *   dueDate       — bu ekstrenin son ödeme tarihi
+   *   balance       — ekstre borcu (kesim anındaki bakiye)
+   *   minPayment    — ekstre borcunun asgarisi
+   *   paidSince     — kesimden sonra yapılan ödemeler toplamı
+   *   remainingMin  — kalan asgari (0 ise asgari karşılanmış)
+   *   remainingAll  — ekstre borcunun ödenmemiş kısmı
+   *   isMinPaid     — asgari karşılandı mı
+   *   isFullPaid    — ekstrenin tamamı ödendi mi
+   */
+  statementSummary(card) {
+    const cutoff = this.lastOccurrence(card.statementDay);
+    const endOfCutoff = new Date(cutoff);
+    endOfCutoff.setHours(23, 59, 59, 999);
+
+    let balance = card.openingDebt || 0;
+    let paidSince = 0;
+
+    Store.data.transactions.forEach(t => {
+      if (t.cardId !== card.id) return;
+      const d = safeDate(t.date);
+      if (!d) return;
+      if (d <= endOfCutoff) balance += t.type === 'expense' ? t.amount : -t.amount;
+      else if (t.type === 'payment') paidSince += t.amount;
+    });
+
+    const round = v => Math.round(v * 100) / 100;
+    balance = round(Math.max(balance, 0));
+    paidSince = round(paidSince);
+
+    const minPayment = round(balance * card.minPaymentRate);
+    const remainingMin = round(Math.max(minPayment - paidSince, 0));
+    const remainingAll = round(Math.max(balance - paidSince, 0));
+
+    // Son ödeme tarihi, kesimden sonraki ilk ödeme günüdür
+    const dueDate = this.nextOccurrence(card.dueDay, cutoff);
+
+    return {
+      hasStatement: balance > 0,
+      cutoff, dueDate, balance, minPayment, paidSince,
+      remainingMin, remainingAll,
+      isMinPaid: balance > 0 && remainingMin <= 0,
+      isFullPaid: balance > 0 && remainingAll <= 0
+    };
+  },
+
+  /**
+   * Ödenmesi gereken kalan asgari tutar.
+   * Ekstre kesilmemişse veya asgari zaten ödenmişse 0 döner.
+   */
   minPayment(card) {
-    return Math.round(card.currentDebt * card.minPaymentRate * 100) / 100;
+    return this.statementSummary(card).remainingMin;
   },
 
   usage(card) {
@@ -176,8 +226,21 @@ export const Calc = {
     const cards = Store.data.cards;
     const limit = cards.reduce((s, c) => s + c.limit, 0);
     const debt = cards.reduce((s, c) => s + c.currentDebt, 0);
-    const minPay = cards.reduce((s, c) => s + this.minPayment(c), 0);
-    return { limit, debt, available: Math.max(limit - debt, 0), minPay, usage: limit > 0 ? debt / limit : 0 };
+
+    // Yalnızca ekstresi kesilmiş ve asgarisi henüz karşılanmamış kartlar
+    let minPay = 0, minPayCards = 0;
+    cards.forEach(c => {
+      const remaining = this.statementSummary(c).remainingMin;
+      if (remaining > 0) { minPay += remaining; minPayCards += 1; }
+    });
+
+    return {
+      limit, debt,
+      available: Math.max(limit - debt, 0),
+      minPay: Math.round(minPay * 100) / 100,
+      minPayCards,
+      usage: limit > 0 ? debt / limit : 0
+    };
   },
 
   /**
@@ -279,22 +342,36 @@ export const Calc = {
   notifications() {
     const threshold = Store.data.settings.notificationThresholdDays;
     return Store.data.cards
-      .filter(c => c.currentDebt > 0)
       .map(c => {
+        const st = this.statementSummary(c);
+        // Ekstre kesilmediyse ya da asgari ödendiyse hatırlatılacak bir şey yok
+        if (!st.hasStatement || st.isMinPaid) return null;
+
         const overdue = this.overdueInfo(c);
-        if (overdue) return { card: c, due: overdue.due, days: -overdue.days, overdue: true };
-        const due = this.nextOccurrence(c.dueDay);
-        return { card: c, due, days: this.daysUntil(due), overdue: false };
+        const days = overdue ? -overdue.days : this.daysUntil(st.dueDate);
+        return {
+          card: c,
+          due: overdue ? overdue.due : st.dueDate,
+          days,
+          overdue: !!overdue,
+          amount: st.remainingMin,
+          // Rozet yalnızca acil olanları sayar; kesilmiş ekstreler listede yine görünür
+          urgent: !!overdue || days <= threshold
+        };
       })
-      .filter(n => n.overdue || n.days <= threshold)
+      .filter(Boolean)
       .sort((a, b) => a.days - b.days);
   },
 
+  /** Yaklaşan ödemeler: yalnızca ekstresi kesilmiş ve asgarisi henüz ödenmemiş kartlar. */
   upcomingPayments(withinDays = 7) {
     return Store.data.cards
-      .filter(c => c.currentDebt > 0)
-      .map(c => ({ card: c, due: this.nextOccurrence(c.dueDay), days: this.daysUntil(this.nextOccurrence(c.dueDay)) }))
-      .filter(n => n.days >= 0 && n.days <= withinDays)
+      .map(c => {
+        const st = this.statementSummary(c);
+        if (!st.hasStatement || st.isMinPaid) return null;
+        return { card: c, due: st.dueDate, days: this.daysUntil(st.dueDate), amount: st.remainingMin, statement: st };
+      })
+      .filter(n => n && n.days >= 0 && n.days <= withinDays)
       .sort((a, b) => a.days - b.days);
   },
 
