@@ -36,6 +36,8 @@ export function parseAmount(str) {
   let s = str.trim().replace(/\s/g, '').replace(/₺/g, '');
   if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
   else if (s.includes(',')) s = s.replace(',', '.');
+  // Yalnızca nokta içeren "10.000" gibi girişler Türkçe binlik ayraçtır, ondalık değil
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
   const n = parseFloat(s);
   return isNaN(n) ? NaN : Math.round(n * 100) / 100;
 }
