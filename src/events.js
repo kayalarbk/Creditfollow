@@ -1,6 +1,7 @@
 import { Store } from './core/store.js';
 import { Theme } from './core/theme.js';
-import { Backup } from './core/backup.js';
+import { Backup, applyAutoRestore } from './core/backup.js';
+import { AutoBackup } from './core/autobackup.js';
 import { byId } from './utils/dom.js';
 import { Charts } from './ui/charts.js';
 import { switchView, renderAll } from './ui/router.js';
@@ -79,6 +80,32 @@ function bindSettings() {
   byId('importFile').addEventListener('change', e => {
     if (e.target.files[0]) Backup.importJSON(e.target.files[0]);
     e.target.value = '';
+  });
+
+  byId('autoBackupBtn').addEventListener('click', async () => {
+    if (!AutoBackup.isSupported()) return;
+
+    if (AutoBackup.status === 'on') {
+      await AutoBackup.disable();
+      renderSettings();
+      toast('Otomatik yedekleme kapatıldı. Yedek dosyanız diskte durmaya devam eder.', 'warn');
+      return;
+    }
+
+    try {
+      if (AutoBackup.status === 'needs-permission') {
+        const parsed = await AutoBackup.reconnect();
+        if (AutoBackup.status !== 'on') { toast('Dosya izni verilmedi.', 'warn'); return; }
+        if (!applyAutoRestore(parsed)) AutoBackup.writeNow(Store.data);
+        toast('Yedek dosyasına yeniden bağlanıldı.');
+      } else {
+        await AutoBackup.enable(Store.data);
+        toast('Otomatik yedekleme açıldı: ' + AutoBackup.fileName());
+      }
+    } catch (e) {
+      if (!e || e.name !== 'AbortError') toast('Otomatik yedekleme başlatılamadı.', 'danger');
+    }
+    renderSettings();
   });
 
   byId('thresholdSave').addEventListener('click', () => {

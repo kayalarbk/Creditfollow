@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { toast } from '../ui/toast.js';
+import { AutoBackup } from './autobackup.js';
 
 /**
  * Tek veri kaynağı: localStorage üzerinde CRUD.
@@ -41,6 +42,7 @@ export const Store = {
   save() {
     try {
       localStorage.setItem(CONFIG.storageKey, JSON.stringify(this.data));
+      AutoBackup.schedule(this.data);
       return true;
     } catch (e) {
       toast('Depolama alanı dolu veya erişilemiyor. Verileriniz kaydedilemedi — yedek almayı deneyin.', 'danger');

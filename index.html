@@ -221,6 +221,17 @@
         <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       </div>
       <p id="lastBackup" class="text-xs text-gray-400 dark:text-gray-500 mt-3"></p>
+
+      <div class="mt-5 pt-5 border-t border-black/10 dark:border-white/10">
+        <h3 class="font-semibold text-sm mb-1">Otomatik yedekleme</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">Bilgisayarınızda bir yedek dosyası seçin; her değişiklik bu dosyaya otomatik kaydedilir. Tarayıcı verileri silinse bile uygulama açılışta dosyadan geri yükler.</p>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <button id="autoBackupBtn" class="h-11 px-5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 font-semibold text-sm transition-colors">
+            <i class="fa-solid fa-file-shield mr-2"></i><span id="autoBackupBtnText">Otomatik yedeklemeyi aç</span>
+          </button>
+          <span id="autoBackupStatus" class="text-xs text-gray-400 dark:text-gray-500"></span>
+        </div>
+      </div>
     </div>
 
     <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">

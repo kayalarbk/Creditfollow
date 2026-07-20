@@ -4,6 +4,27 @@ import { renderAll } from '../ui/router.js';
 import { renderSettings } from '../ui/views/settings.js';
 import { toast } from '../ui/toast.js';
 
+/**
+ * Otomatik yedek dosyasından okunan veriyi, yalnızca tarayıcıdaki veri boşsa uygular.
+ * Tarayıcıda veri varsa dosya değil tarayıcı esas alınır (dosya bir sonraki kayıtta güncellenir).
+ * Dönüş: geri yükleme yapıldıysa true.
+ */
+export function applyAutoRestore(parsed) {
+  if (!parsed) return false;
+  const hasLocal = Store.data.cards.length > 0 || Store.data.transactions.length > 0;
+  const hasFile = parsed.cards.length > 0 || parsed.transactions.length > 0;
+  if (hasLocal || !hasFile) return false;
+
+  Store.data = Object.assign(Store.defaults(), parsed);
+  Store.data.settings = Object.assign(Store.defaults().settings, parsed.settings || {});
+  Store.save();
+  Theme.apply(Store.data.settings.theme);
+  renderAll();
+  renderSettings();
+  toast('Verileriniz otomatik yedek dosyasından geri yüklendi.');
+  return true;
+}
+
 /** JSON dışa/içe aktarma. Veri yalnızca tarayıcıda durduğu için tek kurtarma yolu. */
 export const Backup = {
   exportJSON() {
