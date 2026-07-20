@@ -4,9 +4,10 @@ import { Charts } from './charts.js';
 import { renderBell } from './notifications.js';
 import { renderWidgets, renderCards, renderTransactions } from './views/dashboard.js';
 import { renderCalendar } from './views/calendar.js';
+import { renderTransactionsView } from './views/transactions.js';
 import { renderSettings } from './views/settings.js';
 
-/** Aktif görünüm: 'dashboard' | 'calendar' | 'settings' */
+/** Aktif görünüm: 'dashboard' | 'transactions' | 'calendar' | 'settings' */
 export let currentView = 'dashboard';
 
 export function switchView(name) {
@@ -25,6 +26,7 @@ export function switchView(name) {
     b.classList.toggle('dark:text-gray-300', !active);
   });
 
+  if (name === 'transactions') renderTransactionsView();
   if (name === 'calendar') renderCalendar();
   if (name === 'settings') renderSettings();
 }
@@ -38,11 +40,13 @@ export function renderAll() {
   if (has) {
     Charts.renderDonut();
     Charts.renderTrend();
+    Charts.renderCategory();
     renderWidgets();
     renderCards();
     renderTransactions();
   }
 
   renderBell();
+  if (currentView === 'transactions') renderTransactionsView();
   if (currentView === 'calendar') renderCalendar();
 }

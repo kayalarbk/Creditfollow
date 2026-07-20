@@ -9,6 +9,7 @@ import { closeModal } from './ui/modal.js';
 import { newCardModal } from './ui/modals/new-card.js';
 import { newTransactionModal } from './ui/modals/new-transaction.js';
 import { moveMonth } from './ui/views/calendar.js';
+import { bindTransactionFilters } from './ui/views/transactions.js';
 import { renderSettings } from './ui/views/settings.js';
 import { toast } from './ui/toast.js';
 
@@ -19,6 +20,7 @@ export function bindEvents() {
   bindModal();
   bindCharts();
   bindCalendar();
+  bindTransactionFilters();
   bindSettings();
 }
 
@@ -67,6 +69,10 @@ function bindCharts() {
     Charts.trendRange = parseInt(b.dataset.range, 10);
     Charts.renderTrend();
   }));
+  document.querySelectorAll('.cat-range-btn').forEach(b => b.addEventListener('click', () => {
+    Charts.categoryRange = parseInt(b.dataset.catrange, 10);
+    Charts.renderCategory();
+  }));
 }
 
 function bindCalendar() {
@@ -76,6 +82,7 @@ function bindCalendar() {
 
 function bindSettings() {
   byId('exportBtn').addEventListener('click', () => Backup.exportJSON());
+  byId('exportCsvBtn').addEventListener('click', () => Backup.exportCSV());
   byId('importBtn').addEventListener('click', () => byId('importFile').click());
   byId('importFile').addEventListener('change', e => {
     if (e.target.files[0]) Backup.importJSON(e.target.files[0]);

@@ -1,8 +1,9 @@
 import { Store } from '../../core/store.js';
 import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
-import { fmtTL, fmtTL0, fmtDate } from '../../utils/format.js';
+import { fmtTL, fmtTL0, fmtDate, fmtDateShort, dateSort } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader } from '../modal.js';
+import { buildTxRow } from '../tx-row.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 import { newTransactionModal } from './new-transaction.js';
@@ -30,23 +31,49 @@ export function cardDetailModal(cardId) {
     );
     body.appendChild(summary);
 
+    /* Bu ekstre dönemi */
+    const period = Calc.periodActivity(card);
+    const periodBox = el('div', 'rounded-xl bg-black/[.03] dark:bg-white/5 p-4 space-y-2');
+    periodBox.append(
+      el('p', 'text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider', 'Bu ekstre dönemi'),
+      el('p', 'text-[11px] text-gray-400 dark:text-gray-500',
+        fmtDateShort.format(period.start) + ' – ' + fmtDateShort.format(period.end) + ' (kesim gününde ekstreye yansır)')
+    );
+    const periodRow = (label, value, cls) => {
+      const r = el('div', 'flex items-center justify-between text-sm');
+      r.append(el('span', 'text-gray-600 dark:text-gray-300', label),
+        el('span', 'font-semibold num ' + (cls || ''), value));
+      return r;
+    };
+    periodBox.append(
+      periodRow('Dönem harcaması', fmtTL.format(period.spent), 'text-danger'),
+      periodRow('Dönem ödemesi', fmtTL.format(period.paid), 'text-ok')
+    );
+
+    const inst = Calc.installmentLoad(card);
+    if (inst.activePlans > 0) {
+      periodBox.append(
+        el('div', 'border-t border-black/5 dark:border-white/10 pt-2 mt-1'),
+        periodRow('Aylık taksit yükü', fmtTL.format(inst.monthly)),
+        periodRow('Kalan taksit borcu', fmtTL.format(inst.remaining)),
+        el('p', 'text-[11px] text-gray-400 dark:text-gray-500',
+          inst.activePlans + ' devam eden taksitli harcama')
+      );
+    }
+    body.appendChild(periodBox);
+
     /* Bu karta ait son işlemler */
     const txs = Store.data.transactions
       .filter(x => x.cardId === cardId)
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .sort((a, b) => dateSort(b.date) - dateSort(a.date))
       .slice(0, 6);
 
     if (txs.length) {
       body.appendChild(el('p', 'text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider', 'Son işlemler'));
-      txs.forEach(tx => {
-        const isExp = tx.type === 'expense';
-        const r = el('div', 'flex items-center justify-between text-sm py-1.5');
-        r.append(
-          el('span', 'text-gray-600 dark:text-gray-300 truncate mr-3', tx.description || (isExp ? 'Harcama' : 'Ödeme')),
-          el('span', 'font-semibold num shrink-0 ' + (isExp ? 'text-danger' : 'text-ok'), (isExp ? '−' : '+') + fmtTL.format(tx.amount))
-        );
-        body.appendChild(r);
-      });
+      const list = el('div', '-mx-2');
+      // Düzenleme/silme sonrası modal yeniden açılır ki özet ve liste güncel kalsın
+      txs.forEach(tx => list.appendChild(buildTxRow(tx, { onChange: () => cardDetailModal(cardId) })));
+      body.appendChild(list);
     }
 
     /* Aksiyonlar */

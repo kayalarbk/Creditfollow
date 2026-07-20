@@ -1,8 +1,18 @@
 import { Store } from './store.js';
 import { Theme } from './theme.js';
+import { safeDate, dateSort, category } from '../utils/format.js';
 import { renderAll } from '../ui/router.js';
 import { renderSettings } from '../ui/views/settings.js';
 import { toast } from '../ui/toast.js';
+
+/** Excel'in dosyayı UTF-8 olarak tanıması için gereken bayt sırası işareti. */
+const BOM = '\uFEFF';
+
+/** CSV hücresi: ayraç, tırnak veya satır sonu içeriyorsa tırnaklanır. */
+function csvCell(value) {
+  const s = String(value == null ? '' : value);
+  return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
 
 /**
  * Otomatik yedek dosyasından okunan veriyi, yalnızca tarayıcıdaki veri boşsa uygular.
@@ -15,8 +25,7 @@ export function applyAutoRestore(parsed) {
   const hasFile = parsed.cards.length > 0 || parsed.transactions.length > 0;
   if (hasLocal || !hasFile) return false;
 
-  Store.data = Object.assign(Store.defaults(), parsed);
-  Store.data.settings = Object.assign(Store.defaults().settings, parsed.settings || {});
+  Store.data = Store.normalize(parsed);
   Store.save();
   Theme.apply(Store.data.settings.theme);
   renderAll();
@@ -43,6 +52,46 @@ export const Backup = {
     toast('Yedek dosyası indirildi.');
   },
 
+  /**
+   * İşlemleri Excel'in Türkçe yerel ayarıyla uyumlu CSV olarak indirir:
+   * noktalı virgül ayraç, virgüllü ondalık ve UTF-8 BOM (Türkçe karakterler için).
+   */
+  exportCSV() {
+    const txs = [...Store.data.transactions].sort((a, b) => dateSort(a.date) - dateSort(b.date));
+    if (txs.length === 0) { toast('Dışa aktarılacak işlem yok.', 'warn'); return; }
+
+    const headers = ['Tarih', 'Kart', 'Tür', 'Kategori', 'Açıklama', 'Tutar', 'Taksit'];
+    const rows = txs.map(t => {
+      const card = Store.data.cards.find(c => c.id === t.cardId);
+      const d = safeDate(t.date);
+      return [
+        d ? d.toLocaleDateString('tr-TR') : '',
+        card ? card.bankName + (card.cardLabel ? ' — ' + card.cardLabel : '') : 'Silinmiş kart',
+        t.type === 'expense' ? 'Harcama' : 'Ödeme',
+        t.type === 'expense' ? category(t.category).label : '',
+        t.description || '',
+        // Excel tr-TR ondalık ayracı virgüldür
+        t.amount.toFixed(2).replace('.', ','),
+        t.installments > 1 ? String(t.installments) : '1'
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map(cols => cols.map(csvCell).join(';'))
+      .join('\r\n');
+
+    // BOM (U+FEFF) olmadan Excel UTF-8'i tanımaz, Türkçe karakterler bozulur
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kartpanel-islemler-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast(txs.length + ' işlem CSV olarak indirildi.');
+  },
+
   importJSON(file) {
     const reader = new FileReader();
     reader.onload = () => {
@@ -56,14 +105,19 @@ export const Backup = {
 
         if (!confirm('Mevcut tüm veriler bu yedekle DEĞİŞTİRİLECEK. Devam edilsin mi?')) return;
 
-        Store.data = Object.assign(Store.defaults(), parsed);
-        Store.data.settings = Object.assign(Store.defaults().settings, parsed.settings || {});
+        // normalize(): eksik/bozuk alanları telafi eder, sahipsiz işlemleri ayıklar
+        const clean = Store.normalize(parsed);
+        const dropped = parsed.transactions.length - clean.transactions.length;
+
+        Store.data = clean;
         if (!Store.save()) return;
 
         Theme.apply(Store.data.settings.theme);
         renderAll();
         renderSettings();
-        toast('Yedek başarıyla geri yüklendi.');
+        toast(dropped > 0
+          ? 'Yedek geri yüklendi. ' + dropped + ' geçersiz işlem kaydı atlandı.'
+          : 'Yedek başarıyla geri yüklendi.', dropped > 0 ? 'warn' : 'ok');
       } catch (e) {
         toast('Dosya okunamadı: geçerli bir KartPanel yedeği değil.', 'danger');
       }

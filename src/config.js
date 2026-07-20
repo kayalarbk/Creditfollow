@@ -33,5 +33,22 @@ export const CONFIG = {
     { match: ['deniz'], icon: 'fa-water' },
     { match: ['enpara', 'papara', 'dijital'], icon: 'fa-mobile-screen' }
   ],
-  monthNames: ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
+  monthNames: ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'],
+
+  /* Harcama kategorileri — id veri dosyasına yazılır, label ve renk yalnızca gösterim içindir */
+  categories: [
+    { id: 'market', label: 'Market', icon: 'fa-basket-shopping', color: '#30D158' },
+    { id: 'yemek', label: 'Yeme & içme', icon: 'fa-utensils', color: '#FF9F0A' },
+    { id: 'ulasim', label: 'Ulaşım & yakıt', icon: 'fa-car', color: '#0A84FF' },
+    { id: 'fatura', label: 'Fatura & abonelik', icon: 'fa-file-invoice', color: '#5E5CE6' },
+    { id: 'giyim', label: 'Giyim', icon: 'fa-shirt', color: '#FF375F' },
+    { id: 'saglik', label: 'Sağlık', icon: 'fa-heart-pulse', color: '#FF453A' },
+    { id: 'eglence', label: 'Eğlence', icon: 'fa-film', color: '#BF5AF2' },
+    { id: 'elektronik', label: 'Elektronik', icon: 'fa-laptop', color: '#64D2FF' },
+    { id: 'egitim', label: 'Eğitim', icon: 'fa-graduation-cap', color: '#FFD60A' },
+    { id: 'diger', label: 'Diğer', icon: 'fa-tag', color: '#8E8E93' }
+  ],
+
+  /* Taksit seçenekleri (1 = tek çekim) */
+  installmentOptions: [1, 2, 3, 6, 9, 12]
 };

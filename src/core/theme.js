@@ -13,6 +13,7 @@ export const Theme = {
     if (Store.data.cards.length) {
       Charts.renderDonut();
       Charts.renderTrend();
+      Charts.renderCategory();
     }
   },
 

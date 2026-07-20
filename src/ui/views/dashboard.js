@@ -2,7 +2,8 @@ import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
 import { Calc } from '../../core/calc.js';
 import { el, byId, clear } from '../../utils/dom.js';
-import { fmtTL, fmtTL0, fmtDate, fmtDateShort, bankIcon } from '../../utils/format.js';
+import { fmtTL, fmtTL0, fmtDateShort, dateSort, bankIcon } from '../../utils/format.js';
+import { buildTxRow } from '../tx-row.js';
 import { cardDetailModal } from '../modals/card-detail.js';
 
 /** Üstteki üç özet kutusu + kullanım rozeti. */
@@ -114,6 +115,28 @@ function buildCard(card) {
   );
 
   body.append(barWrap, stats, minRow);
+
+  /* Bu dönem harcaması ve varsa aylık taksit yükü */
+  const period = Calc.periodActivity(card);
+  const inst = Calc.installmentLoad(card);
+  if (period.spent > 0 || inst.activePlans > 0) {
+    const extra = el('div', 'flex items-center justify-between text-xs pt-1 border-t border-black/5 dark:border-white/5 mt-1');
+    extra.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Bu dönem harcaması'),
+      el('span', 'font-semibold num', fmtTL.format(period.spent))
+    );
+    body.appendChild(extra);
+
+    if (inst.activePlans > 0) {
+      const instRow = el('div', 'flex items-center justify-between text-xs');
+      instRow.append(
+        el('span', 'text-gray-500 dark:text-gray-400',
+          'Aylık taksit (' + inst.activePlans + ' plan)'),
+        el('span', 'font-semibold num', fmtTL.format(inst.monthly))
+      );
+      body.appendChild(instRow);
+    }
+  }
   wrap.append(top, body);
   return wrap;
 }
@@ -121,7 +144,7 @@ function buildCard(card) {
 /** Son 8 işlem listesi. */
 export function renderTransactions() {
   const list = clear(byId('txList'));
-  const txs = [...Store.data.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
+  const txs = [...Store.data.transactions].sort((a, b) => dateSort(b.date) - dateSort(a.date)).slice(0, 8);
 
   if (txs.length === 0) {
     list.appendChild(el('p', 'px-5 py-8 text-sm text-gray-400 dark:text-gray-500 text-center',
@@ -129,25 +152,5 @@ export function renderTransactions() {
     return;
   }
 
-  txs.forEach(tx => {
-    const card = Store.data.cards.find(c => c.id === tx.cardId);
-    const isExp = tx.type === 'expense';
-
-    const row = el('div', 'px-5 py-3.5 flex items-center gap-3.5 border-b border-black/5 dark:border-white/5 last:border-0');
-    const ic = el('div', 'w-9 h-9 rounded-xl grid place-items-center shrink-0 ' + (isExp ? 'bg-danger/10 text-danger' : 'bg-ok/10 text-ok'));
-    ic.appendChild(el('i', 'fa-solid ' + (isExp ? 'fa-arrow-up' : 'fa-arrow-down') + ' text-sm'));
-
-    const mid = el('div', 'flex-1 min-w-0');
-    mid.append(
-      el('p', 'text-sm font-medium truncate', tx.description || (isExp ? 'Harcama' : 'Ödeme')),
-      el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate',
-        (card ? card.bankName : 'Silinmiş kart') + ' · ' + fmtDate.format(new Date(tx.date)))
-    );
-
-    const amt = el('p', 'text-sm font-bold num ' + (isExp ? 'text-danger' : 'text-ok'),
-      (isExp ? '−' : '+') + fmtTL.format(tx.amount));
-
-    row.append(ic, mid, amt);
-    list.appendChild(row);
-  });
+  txs.forEach(tx => list.appendChild(buildTxRow(tx)));
 }

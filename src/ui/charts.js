@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js';
 import { Calc } from '../core/calc.js';
-import { byId } from '../utils/dom.js';
+import { el, byId, clear } from '../utils/dom.js';
 import { fmtTL, fmtTL0, fmtDateShort } from '../utils/format.js';
 
 /* Chart.js CDN üzerinden global olarak yüklenir */
@@ -16,12 +16,15 @@ const isDark = () => document.documentElement.classList.contains('dark');
 export const Charts = {
   donut: null,
   trend: null,
+  category: null,
   trendRange: 30,
+  categoryRange: 30,
 
   /** Tema değişiminde grafikler renk paletiyle birlikte yeniden kurulur. */
   destroy() {
     if (this.donut) { this.donut.destroy(); this.donut = null; }
     if (this.trend) { this.trend.destroy(); this.trend = null; }
+    if (this.category) { this.category.destroy(); this.category = null; }
   },
 
   renderTrend() {
@@ -131,7 +134,103 @@ export const Charts = {
     byId('donutSub').textContent = 'Toplam limit ' + fmtTL0.format(t.limit) + ' · Kalan ' + fmtTL0.format(t.available);
   },
 
+  renderCategory() {
+    const ctx = byId('categoryChart');
+    if (!ctx) return;
+    const { items, total } = Calc.categoryBreakdown(this.categoryRange);
+
+    this._paintCatRangeButtons(isDark());
+    byId('categorySub').textContent = total > 0
+      ? 'Toplam ' + fmtTL0.format(total) + ' · ' + items.length + ' kategori'
+      : 'Bu aralıkta harcama yok.';
+
+    this._renderCatLegend(items, total);
+
+    const data = {
+      labels: items.map(i => i.label),
+      datasets: [{
+        data: items.map(i => i.amount),
+        backgroundColor: items.map(i => i.color),
+        borderWidth: 0,
+        borderRadius: items.length > 1 ? 6 : 0,
+        spacing: items.length > 1 ? 2 : 0
+      }]
+    };
+
+    // Veri yokken boş halka: Chart.js boş dataset'te hiçbir şey çizmez
+    if (items.length === 0) {
+      data.labels = ['Harcama yok'];
+      data.datasets[0].data = [1];
+      data.datasets[0].backgroundColor = [isDark() ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'];
+    }
+
+    if (this.category) {
+      this.category.data = data;
+      this.category.update();
+      return;
+    }
+
+    this.category = new Chart(ctx, {
+      type: 'doughnut',
+      data,
+      options: {
+        cutout: '62%',
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign({
+            callbacks: {
+              label: c => {
+                const { items: cur, total: t } = Calc.categoryBreakdown(this.categoryRange);
+                if (!cur.length) return ' Harcama yok';
+                const pct = t > 0 ? Math.round((c.parsed / t) * 100) : 0;
+                return ' ' + c.label + ': ' + fmtTL.format(c.parsed) + ' (%' + pct + ')';
+              }
+            }
+          }, TOOLTIP_STYLE)
+        }
+      }
+    });
+  },
+
   /* ---------- yardımcılar ---------- */
+
+  _paintCatRangeButtons(dark) {
+    document.querySelectorAll('.cat-range-btn').forEach(b => {
+      const on = parseInt(b.dataset.catrange, 10) === this.categoryRange;
+      b.classList.toggle('bg-surface-light', on && !dark);
+      b.classList.toggle('dark:bg-surface-dark', on);
+      b.classList.toggle('shadow-card', on);
+      b.classList.toggle('text-accent', on);
+      b.classList.toggle('text-gray-500', !on);
+      b.classList.toggle('dark:text-gray-400', !on);
+    });
+  },
+
+  /** Grafiğin yanındaki kategori listesi — pay oranıyla birlikte. */
+  _renderCatLegend(items, total) {
+    const box = clear(byId('categoryLegend'));
+    if (!items.length) {
+      box.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500',
+        'Harcama ekledikçe kategori dağılımınız burada görünür.'));
+      return;
+    }
+
+    items.forEach(i => {
+      const row = el('div', 'flex items-center gap-2.5');
+      const dot = el('span', 'w-2.5 h-2.5 rounded-full shrink-0');
+      dot.style.backgroundColor = i.color;
+
+      const label = el('span', 'text-sm flex-1 min-w-0 truncate', i.label);
+      const val = el('span', 'text-sm font-semibold num shrink-0', fmtTL0.format(i.amount));
+      const pct = el('span', 'text-xs text-gray-500 dark:text-gray-400 num shrink-0 w-10 text-right',
+        '%' + Math.round(i.share * 100));
+
+      row.append(dot, label, val, pct);
+      box.appendChild(row);
+    });
+  },
 
   _paintRangeButtons(dark) {
     document.querySelectorAll('.range-btn').forEach(b => {
