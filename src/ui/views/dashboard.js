@@ -36,6 +36,44 @@ export function renderWidgets() {
   // Sarı zeminde okunabilirlik için koyu ton kullanılır
   badge.style.color = col === CONFIG.statusColors.warn ? '#8a6d00' : col;
   badge.style.backgroundColor = col + '22';
+
+  renderMonthSummary();
+}
+
+/** "Bu ayki harcama" kartı: aylık toplam, geçen ayla karşılaştırma ve bütçe çubuğu. */
+function renderMonthSummary() {
+  const spent = Calc.monthlySpend(0);
+  byId('monthSpent').textContent = fmtTL.format(spent);
+
+  // Adil karşılaştırma: geçen ayın yalnızca bugüne kadarki günleri sayılır
+  const prev = Calc.monthlySpend(-1, new Date().getDate());
+  const cmp = byId('monthCompare');
+  if (spent <= 0 && prev <= 0) cmp.textContent = 'Bu ay henüz harcama yok';
+  else if (prev <= 0) cmp.textContent = 'Geçen ay bu tarihte harcama yoktu';
+  else {
+    const diff = Math.round(((spent - prev) / prev) * 100);
+    cmp.textContent = diff === 0
+      ? 'Geçen ayın bu tarihiyle aynı seviyede'
+      : 'Geçen ayın bu tarihine göre %' + Math.abs(diff) + (diff > 0 ? ' fazla' : ' az');
+  }
+
+  const budget = Store.data.settings.monthlyBudget;
+  const wrap = byId('budgetWrap');
+  wrap.classList.toggle('hidden', !(budget > 0));
+  if (!(budget > 0)) return;
+
+  const ratio = spent / budget;
+  byId('budgetLabel').textContent = fmtTL0.format(spent) + ' / ' + fmtTL0.format(budget);
+
+  const bar = byId('budgetBar');
+  bar.style.width = Math.min(Math.round(ratio * 100), 100) + '%';
+  bar.style.backgroundColor = ratio >= 1 ? CONFIG.statusColors.danger
+    : ratio >= 0.8 ? CONFIG.statusColors.warn
+    : CONFIG.statusColors.ok;
+
+  byId('budgetHint').textContent = ratio >= 1
+    ? 'Bütçe ' + fmtTL0.format(spent - budget) + ' aşıldı.'
+    : 'Kalan: ' + fmtTL0.format(budget - spent) + ' · %' + Math.round(ratio * 100) + ' kullanıldı';
 }
 
 /** Kart ızgarası. */

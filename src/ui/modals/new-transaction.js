@@ -1,5 +1,6 @@
 import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
+import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, fmtDateSafe, parseAmount, safeDate } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
@@ -189,6 +190,10 @@ export function newTransactionModal(presetCardId, editId) {
         if (!ok) return;
       }
 
+      // Bütçe eşiği kayıttan önce/sonra karşılaştırılır; yalnızca eşik ilk kez aşılınca uyarılır
+      const budget = Store.data.settings.monthlyBudget;
+      const spentBefore = budget > 0 ? Calc.monthlySpend(0) : 0;
+
       const saved = editing
         ? Store.updateTransaction(editing.id, payload)
         : Store.addTransaction(payload);
@@ -196,8 +201,17 @@ export function newTransactionModal(presetCardId, editId) {
 
       closeModal();
       renderAll();
-      if (editing) toast('İşlem güncellendi.');
-      else toast(txType === 'expense' ? 'Harcama kaydedildi.' : 'Ödeme kaydedildi, borç güncellendi.');
+
+      const spentAfter = budget > 0 ? Calc.monthlySpend(0) : 0;
+      if (budget > 0 && spentAfter >= budget && spentBefore < budget) {
+        toast('Aylık bütçeniz aşıldı: ' + fmtTL.format(spentAfter) + ' / ' + fmtTL.format(budget), 'danger', { duration: 8000 });
+      } else if (budget > 0 && spentAfter >= budget * 0.8 && spentBefore < budget * 0.8) {
+        toast('Aylık bütçenizin %80\'ine ulaştınız: ' + fmtTL.format(spentAfter) + ' / ' + fmtTL.format(budget), 'warn', { duration: 8000 });
+      } else if (editing) {
+        toast('İşlem güncellendi.');
+      } else {
+        toast(txType === 'expense' ? 'Harcama kaydedildi.' : 'Ödeme kaydedildi, borç güncellendi.');
+      }
     });
   });
 }

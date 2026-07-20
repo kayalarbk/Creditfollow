@@ -7,6 +7,7 @@ import { toast } from '../toast.js';
 
 export function renderSettings() {
   byId('thresholdInput').value = Store.data.settings.notificationThresholdDays;
+  byId('budgetInput').value = Store.data.settings.monthlyBudget > 0 ? Store.data.settings.monthlyBudget : '';
   const last = Store.data.settings.lastExport;
   byId('lastBackup').textContent = last
     ? 'Son yedek: ' + fmtDate.format(new Date(last))

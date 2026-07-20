@@ -23,6 +23,7 @@ export const Store = {
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
         currency: 'TRY',
         notificationThresholdDays: CONFIG.defaultThresholdDays,
+        monthlyBudget: 0,
         lastExport: null
       }
     };
@@ -37,6 +38,8 @@ export const Store = {
     const base = this.defaults();
     const out = Object.assign(base, parsed || {});
     out.settings = Object.assign(this.defaults().settings, (parsed && parsed.settings) || {});
+    // Aylık bütçe: 0 = kapalı; bozuk/negatif değerler kapalı sayılır
+    out.settings.monthlyBudget = num(out.settings.monthlyBudget) > 0 ? num(out.settings.monthlyBudget) : 0;
 
     out.cards = (Array.isArray(out.cards) ? out.cards : [])
       .filter(c => c && typeof c === 'object')
@@ -50,7 +53,10 @@ export const Store = {
         minPaymentRate: num(c.minPaymentRate, CONFIG.minPaymentRates[0]),
         // Aylık akdi faiz oranı; 0 = faiz projeksiyonu gösterilmez
         interestRate: Math.min(Math.max(num(c.interestRate, CONFIG.defaultInterestRate), 0), 1),
-        color: Array.isArray(c.color) && c.color.length === 2 ? c.color : CONFIG.cardGradients[0],
+        // Renk yoksa sıraya göre dağıt; hepsine aynı gradyanı vermek kartları ayırt edilemez kılar
+        color: Array.isArray(c.color) && c.color.length === 2
+          ? c.color
+          : CONFIG.cardGradients[i % CONFIG.cardGradients.length],
         createdAt: safeDate(c.createdAt) ? c.createdAt : new Date().toISOString()
       }));
 

@@ -52,14 +52,42 @@ export const Calc = {
     const today = this.today();
     if (due >= today) return null; // son ödeme günü henüz gelmedi/bugün
 
-    const paidSince = Store.data.transactions.some(t => {
-      if (t.cardId !== card.id || t.type !== 'payment') return false;
-      const d = safeDate(t.date);
-      return d && d >= due;
-    });
-    if (paidSince) return null;
+    // O tarihte ödenecek bir borç var mıydı? Borç sonradan oluştuysa gecikme sayılmaz.
+    const endOfDue = new Date(due);
+    endOfDue.setHours(23, 59, 59, 999);
+    let balanceAtDue = card.openingDebt || 0;
+    let paidSince = false;
 
-    return { due, days: Math.round((today - due) / 86400000) };
+    Store.data.transactions.forEach(t => {
+      if (t.cardId !== card.id) return;
+      const d = safeDate(t.date);
+      if (!d) return;
+      if (d <= endOfDue) balanceAtDue += t.type === 'expense' ? t.amount : -t.amount;
+      if (t.type === 'payment' && d >= due) paidSince = true;
+    });
+
+    if (balanceAtDue <= 0.005 || paidSince) return null;
+
+    return { due, days: Math.round((today - due) / 86400000), amount: Math.round(balanceAtDue * 100) / 100 };
+  },
+
+  /**
+   * Verilen ay kaymasındaki (0 = bu ay, -1 = geçen ay) takvim ayının harcama toplamı.
+   * toDay verilirse yalnızca ayın ilk toDay günü sayılır — ay ortasında
+   * geçen ayla adil karşılaştırma için. Mutabakat düzeltmeleri harcama değildir.
+   */
+  monthlySpend(offset = 0, toDay = null) {
+    const now = this.today();
+    const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1);
+
+    return Store.data.transactions.reduce((sum, t) => {
+      if (t.type !== 'expense' || t.isAdjustment) return sum;
+      const d = safeDate(t.date);
+      if (!d || d < start || d >= end) return sum;
+      if (toDay !== null && d.getDate() > toDay) return sum;
+      return sum + t.amount;
+    }, 0);
   },
 
   minPayment(card) {

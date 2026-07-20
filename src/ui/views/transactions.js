@@ -90,6 +90,11 @@ function applyFilters() {
   }).sort((a, b) => dateSort(b.date) - dateSort(a.date));
 }
 
+/** Aktif filtrelerle eşleşen işlemler — CSV dışa aktarma için. */
+export function getFilteredTransactions() {
+  return applyFilters();
+}
+
 export function renderTransactionsView() {
   syncCardOptions();
 

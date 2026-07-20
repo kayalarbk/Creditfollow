@@ -154,6 +154,27 @@
         </div>
       </div>
 
+      <!-- Aylık harcama ve bütçe -->
+      <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="font-semibold">Bu ayki harcama</h2>
+            <p id="monthCompare" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
+          </div>
+          <p id="monthSpent" class="text-2xl font-extrabold num tracking-tight"></p>
+        </div>
+        <div id="budgetWrap" class="hidden mt-4">
+          <div class="flex items-center justify-between text-xs mb-1.5">
+            <span class="font-medium text-gray-500 dark:text-gray-400">Aylık bütçe</span>
+            <span id="budgetLabel" class="font-semibold num"></span>
+          </div>
+          <div class="h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+            <div id="budgetBar" class="progress-fill h-full rounded-full" style="width:0%"></div>
+          </div>
+          <p id="budgetHint" class="text-xs text-gray-500 dark:text-gray-400 mt-1.5"></p>
+        </div>
+      </div>
+
       <!-- Borç seyri -->
       <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
         <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -235,6 +256,9 @@
         </div>
         <button id="txClearFilters" class="h-11 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors shrink-0">
           Temizle
+        </button>
+        <button id="txExportCsv" title="Filtrelenen işlemleri CSV olarak indir" class="h-11 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors shrink-0">
+          <i class="fa-solid fa-file-csv"></i><span class="hidden sm:inline ml-2">CSV</span>
         </button>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -333,6 +357,16 @@
         <input id="thresholdInput" type="number" min="1" max="15" class="w-24 h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 focus:ring-2 focus:ring-accent num font-semibold">
         <span class="text-sm text-gray-500 dark:text-gray-400">gün önce</span>
         <button id="thresholdSave" class="ml-auto h-10 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors">Kaydet</button>
+      </div>
+    </div>
+
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <h2 class="font-bold mb-1">Aylık harcama bütçesi</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Tüm kartlardaki aylık toplam harcamanız için hedef belirleyin; panelde ilerleme çubuğu görünür, %80'e gelince ve aşınca uyarılırsınız. Kapatmak için 0 girin.</p>
+      <div class="flex items-center gap-3">
+        <input id="budgetInput" type="text" inputmode="decimal" placeholder="0" class="w-36 h-11 px-3 rounded-xl bg-black/5 dark:bg-white/10 border-0 focus:ring-2 focus:ring-accent num font-semibold">
+        <span class="text-sm text-gray-500 dark:text-gray-400">TL / ay</span>
+        <button id="budgetSave" class="ml-auto h-10 px-4 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-sm font-semibold transition-colors">Kaydet</button>
       </div>
     </div>
 

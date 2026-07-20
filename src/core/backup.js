@@ -56,8 +56,10 @@ export const Backup = {
    * İşlemleri Excel'in Türkçe yerel ayarıyla uyumlu CSV olarak indirir:
    * noktalı virgül ayraç, virgüllü ondalık ve UTF-8 BOM (Türkçe karakterler için).
    */
-  exportCSV() {
-    const txs = [...Store.data.transactions].sort((a, b) => dateSort(a.date) - dateSort(b.date));
+  exportCSV(list) {
+    // Liste verilirse (ör. işlemler görünümündeki aktif filtreler) yalnızca o kayıtlar aktarılır
+    const source = Array.isArray(list) ? list : Store.data.transactions;
+    const txs = [...source].sort((a, b) => dateSort(a.date) - dateSort(b.date));
     if (txs.length === 0) { toast('Dışa aktarılacak işlem yok.', 'warn'); return; }
 
     const headers = ['Tarih', 'Kart', 'Tür', 'Kategori', 'Açıklama', 'Tutar', 'Taksit'];

@@ -9,10 +9,11 @@ import { closeModal } from './ui/modal.js';
 import { newCardModal } from './ui/modals/new-card.js';
 import { newTransactionModal } from './ui/modals/new-transaction.js';
 import { moveMonth } from './ui/views/calendar.js';
-import { bindTransactionFilters } from './ui/views/transactions.js';
+import { bindTransactionFilters, getFilteredTransactions } from './ui/views/transactions.js';
 import { recurringModal } from './ui/modals/recurring.js';
 import { renderSettings } from './ui/views/settings.js';
 import { toast } from './ui/toast.js';
+import { parseAmount } from './utils/format.js';
 
 /** Tüm DOM olay bağlantıları tek yerde toplanır. */
 export function bindEvents() {
@@ -22,6 +23,8 @@ export function bindEvents() {
   bindCharts();
   bindCalendar();
   bindTransactionFilters();
+  // İşlemler görünümündeki CSV düğmesi aktif filtrelerle dışa aktarır
+  byId('txExportCsv').addEventListener('click', () => Backup.exportCSV(getFilteredTransactions()));
   bindSettings();
   bindShortcuts();
 }
@@ -157,6 +160,14 @@ function bindSettings() {
       if (!e || e.name !== 'AbortError') toast('Otomatik yedekleme başlatılamadı.', 'danger');
     }
     renderSettings();
+  });
+
+  byId('budgetSave').addEventListener('click', () => {
+    const raw = byId('budgetInput').value.trim();
+    const v = raw === '' || raw === '0' ? 0 : parseAmount(raw);
+    if (isNaN(v) || v < 0) { toast('Geçerli bir tutar girin (kapatmak için 0).', 'warn'); return; }
+    Store.data.settings.monthlyBudget = v;
+    if (Store.save()) { renderAll(); toast(v > 0 ? 'Aylık bütçe kaydedildi.' : 'Aylık bütçe kapatıldı.'); }
   });
 
   byId('thresholdSave').addEventListener('click', () => {

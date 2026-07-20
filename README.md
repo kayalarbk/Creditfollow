@@ -10,7 +10,9 @@ tüm veriler `localStorage` içinde, yalnızca kullanıcının cihazında durur.
 - **Kartlar** — banka, limit, hesap kesim/son ödeme günü ve asgari ödeme oranı ile kart yönetimi
 - **İşlemler** — harcama ve ödeme kaydı; kart borcuna anında yansır
 - **Takvim** — ay görünümünde hesap kesim ve son ödeme günleri
-- **Bildirimler** — son ödeme tarihine N gün kala uyarı (eşik ayarlanabilir)
+- **Bildirimler** — son ödeme tarihine N gün kala uyarı ve gecikme tespiti (eşik ayarlanabilir)
+- **Aylık bütçe** — toplam harcama hedefi, panelde ilerleme çubuğu, %80 ve aşım uyarıları
+- **CSV dışa aktarma** — tüm işlemler veya aktif filtrelerle eşleşenler, Excel uyumlu
 - **Yedekleme** — JSON dışa/içe aktarma
 - **Koyu tema** — sistem tercihine göre otomatik, elle değiştirilebilir
 
