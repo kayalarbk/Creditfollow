@@ -75,9 +75,15 @@
         <button id="addBtn" class="h-10 px-3 sm:px-4 rounded-lg bg-accent hover:bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5 shadow-card transition-colors" aria-label="Ekle">
           <i class="fa-solid fa-plus"></i><span class="hidden sm:inline">Ekle</span>
         </button>
-        <div id="addMenu" class="hidden absolute right-0 mt-2 w-56 rounded-2xl bg-surface-light dark:bg-surface-dark shadow-pop border border-black/5 dark:border-white/10 overflow-hidden scale-in origin-top-right">
+        <div id="addMenu" class="hidden absolute right-0 mt-2 w-60 rounded-2xl bg-surface-light dark:bg-surface-dark shadow-pop border border-black/5 dark:border-white/10 overflow-hidden scale-in origin-top-right">
           <button id="menuNewCard" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left">
-            <i class="fa-solid fa-credit-card text-accent w-4"></i> Yeni kart ekle
+            <i class="fa-solid fa-credit-card text-accent w-4"></i> Kredi kartı ekle
+          </button>
+          <button id="menuNewOverdraft" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left border-t border-black/5 dark:border-white/10">
+            <i class="fa-solid fa-building-columns text-warn w-4"></i> Avans hesap ekle
+          </button>
+          <button id="menuNewLoan" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left border-t border-black/5 dark:border-white/10">
+            <i class="fa-solid fa-file-invoice-dollar text-purple-500 w-4"></i> İhtiyaç kredisi ekle
           </button>
           <button id="menuNewTx" class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left border-t border-black/5 dark:border-white/10">
             <i class="fa-solid fa-arrow-right-arrow-left text-ok w-4"></i> Harcama / ödeme ekle
@@ -97,11 +103,16 @@
       <div class="w-20 h-20 mx-auto rounded-3xl bg-accent/10 text-accent grid place-items-center mb-5">
         <i class="fa-solid fa-credit-card text-3xl"></i>
       </div>
-      <h2 class="text-xl font-bold mb-2">Henüz kart eklenmedi</h2>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">İlk kredi kartınızı ekleyin; borçlarınız, ödeme tarihleriniz ve limit kullanımınız tek ekranda toplansın.</p>
-      <button id="emptyAddBtn" class="h-11 px-6 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold shadow-card transition-colors">
-        <i class="fa-solid fa-plus mr-2"></i>İlk kartını ekle
-      </button>
+      <h2 class="text-xl font-bold mb-2">Henüz ürün eklenmedi</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">Kredi kartlarınızı, avans hesaplarınızı ve ihtiyaç kredilerinizi ekleyin; tüm borçlarınız banka banka tek ekranda toplansın.</p>
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <button id="emptyAddBtn" class="h-11 px-6 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold shadow-card transition-colors">
+          <i class="fa-solid fa-plus mr-2"></i>İlk kartını ekle
+        </button>
+        <button id="emptyBanksBtn" class="h-11 px-6 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 font-semibold text-sm transition-colors">
+          <i class="fa-solid fa-building-columns mr-2"></i>Önce bankalarımı seçeyim
+        </button>
+      </div>
     </div>
 
     <div id="dashContent" class="space-y-6">
@@ -136,7 +147,7 @@
           <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 flex items-center gap-4 fade-in">
             <div class="w-11 h-11 rounded-xl bg-warn/15 text-yellow-600 dark:text-warn grid place-items-center shrink-0"><i class="fa-solid fa-coins"></i></div>
             <div class="min-w-0">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Ödenecek asgari</p>
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Bu ay ödenecek</p>
               <p id="wMinPay" class="text-lg font-bold num truncate"></p>
               <p id="wMinPaySub" class="text-xs text-gray-500 dark:text-gray-400 truncate"></p>
             </div>
@@ -196,7 +207,7 @@
       <!-- Kart bazında borç dağılımı -->
       <div id="cardBreakdownCard" class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
         <div class="mb-4">
-          <h2 class="font-semibold">Kart bazında borç</h2>
+          <h2 class="font-semibold">Ürün bazında borç</h2>
           <p id="cardBreakdownSub" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
         </div>
         <div class="grid sm:grid-cols-2 gap-5 items-center">
@@ -228,13 +239,13 @@
         </div>
       </div>
 
-      <!-- Kart grid -->
+      <!-- Banka bazında ürünler -->
       <div>
         <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold">Kartlarım</h2>
+          <h2 class="font-semibold">Bankalarım</h2>
           <span id="cardCount" class="text-xs text-gray-500 dark:text-gray-400 num"></span>
         </div>
-        <div id="cardsGrid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"></div>
+        <div id="bankGroups" class="space-y-4 sm:space-y-5"></div>
       </div>
 
       <!-- Son işlemler -->
@@ -299,6 +310,7 @@
       <div class="flex items-center gap-5 mt-4 text-xs text-gray-500 dark:text-gray-400">
         <span class="flex items-center gap-1.5"><span class="cal-dot bg-warn"></span> Hesap kesim</span>
         <span class="flex items-center gap-1.5"><span class="cal-dot bg-danger"></span> Son ödeme</span>
+        <span class="flex items-center gap-1.5"><span class="cal-dot bg-accent"></span> Kredi taksiti</span>
       </div>
     </div>
     <div id="calDetail" class="hidden rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 fade-in"></div>
@@ -306,6 +318,17 @@
 
   <!-- ============ AYARLAR GÖRÜNÜMÜ ============ -->
   <section id="view-settings" class="view hidden max-w-2xl mx-auto space-y-4">
+    <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <h2 class="font-bold">Bankalarım</h2>
+        <button id="manageBanksBtn" class="h-9 px-3.5 rounded-lg bg-accent hover:bg-blue-600 text-white text-sm font-semibold transition-colors shrink-0">
+          <i class="fa-solid fa-pen mr-1.5"></i>Düzenle
+        </button>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Çalıştığınız bankaları seçin; kredi kartı, avans hesap ve kredi eklerken yalnızca bu bankalar listelenir, panelde borçlarınız banka banka gruplanır.</p>
+      <div id="banksList" class="space-y-2"></div>
+    </div>
+
     <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
       <h2 class="font-bold mb-1">Veri yedekleme</h2>
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Tüm verileriniz yalnızca bu tarayıcıda saklanır. Tarayıcı verilerini temizlemeden önce yedek almanız önerilir.</p>
@@ -378,7 +401,13 @@
           <span class="text-gray-600 dark:text-gray-300">Harcama / ödeme ekle</span><kbd class="kbd">N</kbd>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <span class="text-gray-600 dark:text-gray-300">Yeni kart ekle</span><kbd class="kbd">K</kbd>
+          <span class="text-gray-600 dark:text-gray-300">Kredi kartı ekle</span><kbd class="kbd">K</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">Avans hesap ekle</span><kbd class="kbd">A</kbd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-gray-600 dark:text-gray-300">İhtiyaç kredisi ekle</span><kbd class="kbd">İ</kbd>
         </div>
         <div class="flex items-center justify-between gap-3">
           <span class="text-gray-600 dark:text-gray-300">İşlemlerde ara</span><kbd class="kbd">/</kbd>

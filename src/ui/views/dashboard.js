@@ -5,6 +5,8 @@ import { el, byId, clear } from '../../utils/dom.js';
 import { fmtTL, fmtTL0, fmtDateShort, dateSort, bankIcon } from '../../utils/format.js';
 import { buildTxRow } from '../tx-row.js';
 import { cardDetailModal } from '../modals/card-detail.js';
+import { overdraftDetailModal } from '../modals/overdraft-detail.js';
+import { loanDetailModal } from '../modals/loan-detail.js';
 
 /** Üstteki üç özet kutusu + kullanım rozeti. */
 export function renderWidgets() {
@@ -18,15 +20,17 @@ export function renderWidgets() {
     wUpSub.textContent = 'Önümüzdeki 7 gün temiz 🎉';
   } else {
     // Yaklaşan yük, kartın tüm borcu değil ödenmesi gereken kalan asgaridir
-    wUp.textContent = up.length + ' kart · ' + fmtTL0.format(up.reduce((s, n) => s + n.amount, 0));
+    wUp.textContent = up.length + ' ödeme · ' + fmtTL0.format(up.reduce((s, n) => s + n.amount, 0));
     const first = up[0];
-    wUpSub.textContent = 'En yakın: ' + first.card.bankName + ' — ' + (first.days === 0 ? 'bugün' : first.days + ' gün sonra');
+    wUpSub.textContent = 'En yakın: ' + first.title + ' — ' + (first.days === 0 ? 'bugün' : first.days + ' gün sonra');
   }
 
-  byId('wMinPay').textContent = fmtTL.format(t.minPay);
-  byId('wMinPaySub').textContent = t.minPayCards === 0
-    ? 'Ödenecek asgari yok'
-    : t.minPayCards + ' kartın kesilmiş ekstresi için';
+  // Kart asgarisi ve kredi taksitleri aynı ayda ödenecek nakit yükünü oluşturur
+  byId('wMinPay').textContent = fmtTL.format(t.minPay + t.loanMonthly);
+  const minParts = [];
+  if (t.minPayCards > 0) minParts.push(t.minPayCards + ' kart asgarisi');
+  if (t.loanMonthly > 0) minParts.push(fmtTL0.format(t.loanMonthly) + ' kredi taksiti');
+  byId('wMinPaySub').textContent = minParts.length === 0 ? 'Ödenecek asgari yok' : minParts.join(' + ');
 
   const pct = Math.round(t.usage * 100);
   byId('wUsage').textContent = '%' + pct;
@@ -80,11 +84,194 @@ function renderMonthSummary() {
     : 'Kalan: ' + fmtTL0.format(budget - spent) + ' · %' + Math.round(ratio * 100) + ' kullanıldı';
 }
 
-/** Kart ızgarası. */
+/**
+ * Banka bazında gruplanmış ürün listesi.
+ * Aynı bankadaki kredi kartı, avans hesap ve krediler tek blokta toplanır;
+ * kullanıcı borcunu kart kart değil banka banka görmek ister.
+ */
 export function renderCards() {
-  const grid = clear(byId('cardsGrid'));
-  byId('cardCount').textContent = Store.data.cards.length + ' kart';
-  Store.data.cards.forEach(card => grid.appendChild(buildCard(card)));
+  const wrap = clear(byId('bankGroups'));
+  const groups = Calc.bankGroups();
+
+  const totalProducts = Store.data.cards.length + Store.data.overdrafts.length + Store.data.loans.length;
+  byId('cardCount').textContent = groups.length + ' banka · ' + totalProducts + ' ürün';
+
+  if (groups.length === 0) {
+    wrap.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500 py-6 text-center',
+      'Henüz ürün eklenmedi. "+ Ekle" ile kredi kartı, avans hesap veya kredi ekleyin.'));
+    return;
+  }
+
+  groups.forEach(g => wrap.appendChild(buildBankGroup(g)));
+}
+
+function buildBankGroup(g) {
+  const section = el('section', 'fade-in rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark overflow-hidden');
+
+  /* Banka başlığı: toplam borç ve limit kullanımı */
+  const head = el('div', 'flex items-center gap-3 px-4 sm:px-5 py-4 border-b border-black/5 dark:border-white/10');
+  const ic = el('div', 'w-10 h-10 rounded-xl bg-accent/10 text-accent grid place-items-center shrink-0');
+  ic.appendChild(el('i', 'fa-solid ' + bankIcon(g.bank.name)));
+
+  const info = el('div', 'min-w-0 flex-1');
+  const parts = [];
+  if (g.cards.length) parts.push(g.cards.length + ' kart');
+  if (g.overdrafts.length) parts.push(g.overdrafts.length + ' avans');
+  if (g.loans.length) parts.push(g.loans.length + ' kredi');
+  info.append(
+    el('p', 'font-bold truncate', g.bank.name),
+    el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate', parts.join(' · '))
+  );
+
+  const amountBox = el('div', 'text-right shrink-0');
+  amountBox.append(
+    el('p', 'text-[11px] text-gray-500 dark:text-gray-400', 'Toplam borç'),
+    el('p', 'text-lg font-extrabold num', fmtTL.format(g.debt))
+  );
+  head.append(ic, info, amountBox);
+
+  /* Limit kullanımı yalnızca rotatif ürünü olan bankalarda anlamlıdır */
+  if (g.limit > 0) {
+    const track = el('div', 'h-1 bg-black/5 dark:bg-white/10');
+    const fill = el('div', 'h-full');
+    fill.style.width = Math.min(g.usage * 100, 100) + '%';
+    fill.style.backgroundColor = Calc.usageColor(g.usage);
+    track.appendChild(fill);
+    section.append(head, track);
+  } else {
+    section.appendChild(head);
+  }
+
+  const grid = el('div', 'p-4 sm:p-5 grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5');
+  g.cards.forEach(c => grid.appendChild(buildCard(c)));
+  g.overdrafts.forEach(o => grid.appendChild(buildOverdraft(o)));
+  g.loans.forEach(l => grid.appendChild(buildLoan(l)));
+  section.appendChild(grid);
+
+  return section;
+}
+
+/** Ürün kutularının ortak kabuğu: tıklanabilir, üstte renkli banka görseli. */
+function productShell(product, typeLabel, onOpen, debtLabel, debtValue) {
+  const wrap = el('article', 'rounded-xl2 bg-black/[.02] dark:bg-white/[.03] border border-black/5 dark:border-white/10 overflow-hidden hover:-translate-y-0.5 hover:shadow-pop transition-all duration-300 cursor-pointer');
+  wrap.setAttribute('role', 'button');
+  wrap.tabIndex = 0;
+  wrap.addEventListener('click', onOpen);
+  wrap.addEventListener('keydown', e => { if (e.key === 'Enter') onOpen(); });
+
+  const top = el('div', 'bank-card p-4 text-white');
+  top.style.setProperty('--bc1', product.color[0]);
+  top.style.setProperty('--bc2', product.color[1]);
+
+  const topRow = el('div', 'flex items-center justify-between mb-5');
+  const nameBox = el('div', 'min-w-0');
+  nameBox.append(
+    el('p', 'font-bold truncate', product.label || product.cardLabel || typeLabel.label),
+    el('p', 'text-xs text-white/70 truncate', typeLabel.label)
+  );
+  topRow.append(nameBox, el('i', 'fa-solid ' + typeLabel.icon + ' text-xl text-white/85'));
+  top.append(
+    topRow,
+    el('p', 'text-[11px] uppercase tracking-wider text-white/60 font-medium', debtLabel),
+    el('p', 'text-2xl font-extrabold num', fmtTL.format(debtValue))
+  );
+
+  const body = el('div', 'p-4 space-y-3');
+  wrap.append(top, body);
+  return { wrap, body };
+}
+
+/** İki sütunlu küçük istatistik kutusu. */
+function statBox(label, val, extraCls) {
+  const b = el('div', 'rounded-lg bg-black/[.03] dark:bg-white/5 px-2.5 py-2');
+  b.append(
+    el('p', 'text-gray-500 dark:text-gray-400 mb-0.5', label),
+    el('p', 'font-semibold num ' + (extraCls || ''), val)
+  );
+  return b;
+}
+
+/** Avans (kredili mevduat) hesap kutusu. */
+function buildOverdraft(od) {
+  const type = CONFIG.productTypes.overdraft;
+  const ratio = Calc.overdraftUsage(od);
+  const { wrap, body } = productShell(od, type, () => overdraftDetailModal(od.id), 'Kullanılan', od.currentDebt);
+
+  const barWrap = el('div');
+  const barTop = el('div', 'flex justify-between text-xs mb-1.5');
+  barTop.append(
+    el('span', 'text-gray-500 dark:text-gray-400', 'Limit kullanımı'),
+    el('span', 'font-semibold num', '%' + Math.round(ratio * 100))
+  );
+  const track = el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+  const fill = el('div', 'progress-fill h-full rounded-full');
+  fill.style.width = Math.min(ratio * 100, 100) + '%';
+  fill.style.backgroundColor = Calc.usageColor(ratio);
+  track.appendChild(fill);
+  barWrap.append(barTop, track);
+
+  const stats = el('div', 'grid grid-cols-2 gap-2 text-xs');
+  stats.append(
+    statBox('Limit', fmtTL0.format(od.limit)),
+    statBox('Kullanılabilir', fmtTL0.format(Math.max(od.limit - od.currentDebt, 0)))
+  );
+
+  body.append(barWrap, stats);
+
+  // Avans faizi kart faizinden yüksektir; aylık maliyeti görünür kılmak uyarı işlevi görür
+  if (od.currentDebt > 0 && od.interestRate > 0) {
+    const cost = el('div', 'flex items-center justify-between text-xs pt-1');
+    cost.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Aylık faiz maliyeti'),
+      el('span', 'font-semibold num text-danger', fmtTL.format(od.currentDebt * od.interestRate))
+    );
+    body.appendChild(cost);
+  }
+  return wrap;
+}
+
+/** İhtiyaç kredisi kutusu. */
+function buildLoan(loan) {
+  const type = CONFIG.productTypes.loan;
+  const s = Calc.loanSummary(loan);
+  const { wrap, body } = productShell(loan, type, () => loanDetailModal(loan.id), 'Kalan borç', s.remainingDebt);
+
+  const barWrap = el('div');
+  const barTop = el('div', 'flex justify-between text-xs mb-1.5');
+  barTop.append(
+    el('span', 'text-gray-500 dark:text-gray-400', 'Ödenen taksit'),
+    el('span', 'font-semibold num', loan.paidInstallments + ' / ' + loan.totalInstallments)
+  );
+  const track = el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+  const fill = el('div', 'progress-fill h-full rounded-full bg-accent');
+  fill.style.width = Math.round(s.progress * 100) + '%';
+  track.appendChild(fill);
+  barWrap.append(barTop, track);
+
+  const stats = el('div', 'grid grid-cols-2 gap-2 text-xs');
+  stats.append(
+    statBox('Aylık taksit', fmtTL0.format(loan.monthlyPayment)),
+    statBox('Kalan taksit', s.remainingCount + ' adet'),
+    statBox('Sonraki ödeme', s.nextDue ? fmtDateShort.format(s.nextDue) : '—',
+      s.overdueDays > 0 ? 'text-danger' : ''),
+    statBox('Son taksit', fmtDateShort.format(s.lastDue))
+  );
+
+  body.append(barWrap, stats);
+
+  if (s.isFinished) {
+    const done = el('div', 'flex items-center gap-2 rounded-lg bg-ok/10 text-ok px-2.5 py-2 text-xs font-semibold');
+    done.append(el('i', 'fa-solid fa-circle-check'), el('span', '', 'Kredi kapandı'));
+    body.appendChild(done);
+  } else if (s.overdueDays > 0) {
+    const warn = el('div', 'flex items-center gap-2 rounded-lg bg-danger/10 text-danger px-2.5 py-2 text-xs font-semibold');
+    warn.append(
+      el('i', 'fa-solid fa-triangle-exclamation'),
+      el('span', '', s.overdueDays + ' gündür taksit işaretlenmedi')
+    );
+    body.appendChild(warn);
+  }
+  return wrap;
 }
 
 function buildCard(card) {
@@ -95,32 +282,14 @@ function buildCard(card) {
   const late = Calc.overdueInfo(card);
   const soon = card.currentDebt > 0 && Calc.daysUntil(due) <= Store.data.settings.notificationThresholdDays;
 
-  const wrap = el('article', 'fade-in rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark overflow-hidden hover:-translate-y-0.5 hover:shadow-pop transition-all duration-300 cursor-pointer');
-  wrap.setAttribute('role', 'button');
-  wrap.tabIndex = 0;
-  wrap.addEventListener('click', () => cardDetailModal(card.id));
-  wrap.addEventListener('keydown', e => { if (e.key === 'Enter') cardDetailModal(card.id); });
-
-  /* Banka kartı görseli */
-  const top = el('div', 'bank-card p-4 text-white');
-  top.style.setProperty('--bc1', card.color[0]);
-  top.style.setProperty('--bc2', card.color[1]);
-
-  const topRow = el('div', 'flex items-center justify-between mb-5');
-  const nameBox = el('div', 'min-w-0');
-  nameBox.append(
-    el('p', 'font-bold truncate', card.bankName),
-    el('p', 'text-xs text-white/70 truncate', card.cardLabel || 'Kredi kartı')
+  // Banka adı grubun başlığında zaten var; kutuda kartın kendi etiketi öne çıkar
+  const { wrap, body } = productShell(
+    { color: card.color, label: card.cardLabel },
+    CONFIG.productTypes.card,
+    () => cardDetailModal(card.id),
+    'Güncel borç',
+    card.currentDebt
   );
-  topRow.append(nameBox, el('i', 'fa-solid ' + bankIcon(card.bankName) + ' text-xl text-white/85'));
-  top.append(
-    topRow,
-    el('p', 'text-[11px] uppercase tracking-wider text-white/60 font-medium', 'Güncel borç'),
-    el('p', 'text-2xl font-extrabold num', fmtTL.format(card.currentDebt))
-  );
-
-  /* Alt bilgi bölümü */
-  const body = el('div', 'p-4 space-y-3');
 
   const barWrap = el('div');
   const barTop = el('div', 'flex justify-between text-xs mb-1.5');
@@ -135,20 +304,12 @@ function buildCard(card) {
   track.appendChild(fill);
   barWrap.append(barTop, track);
 
-  const stat = (label, val, extraCls) => {
-    const b = el('div', 'rounded-lg bg-black/[.03] dark:bg-white/5 px-2.5 py-2');
-    b.append(
-      el('p', 'text-gray-500 dark:text-gray-400 mb-0.5', label),
-      el('p', 'font-semibold num ' + (extraCls || ''), val)
-    );
-    return b;
-  };
   const stats = el('div', 'grid grid-cols-2 gap-2 text-xs');
   stats.append(
-    stat('Limit', fmtTL0.format(card.limit)),
-    stat('Kullanılabilir', fmtTL0.format(Math.max(card.limit - card.currentDebt, 0))),
-    stat('Hesap kesim', fmtDateShort.format(statement)),
-    stat('Son ödeme', fmtDateShort.format(due), late || soon ? 'text-danger' : '')
+    statBox('Limit', fmtTL0.format(card.limit)),
+    statBox('Kullanılabilir', fmtTL0.format(Math.max(card.limit - card.currentDebt, 0))),
+    statBox('Hesap kesim', fmtDateShort.format(statement)),
+    statBox('Son ödeme', fmtDateShort.format(due), late || soon ? 'text-danger' : '')
   );
 
   if (late) {
@@ -211,7 +372,6 @@ function buildCard(card) {
       body.appendChild(instRow);
     }
   }
-  wrap.append(top, body);
   return wrap;
 }
 

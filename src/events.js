@@ -8,6 +8,9 @@ import { switchView, renderAll } from './ui/router.js';
 import { closeModal } from './ui/modal.js';
 import { newCardModal } from './ui/modals/new-card.js';
 import { newTransactionModal } from './ui/modals/new-transaction.js';
+import { overdraftModal } from './ui/modals/new-overdraft.js';
+import { loanModal } from './ui/modals/new-loan.js';
+import { banksModal } from './ui/modals/banks.js';
 import { moveMonth } from './ui/views/calendar.js';
 import { bindTransactionFilters, getFilteredTransactions } from './ui/views/transactions.js';
 import { recurringModal } from './ui/modals/recurring.js';
@@ -61,6 +64,14 @@ function bindShortcuts() {
         e.preventDefault();
         newCardModal();
         break;
+      case 'a':
+        e.preventDefault();
+        overdraftModal();
+        break;
+      case 'i':
+        e.preventDefault();
+        loanModal();
+        break;
       case '/':
         e.preventDefault();
         switchView('transactions');
@@ -93,8 +104,11 @@ function bindMenus() {
   });
 
   byId('menuNewCard').addEventListener('click', () => { addMenu.classList.add('hidden'); newCardModal(); });
+  byId('menuNewOverdraft').addEventListener('click', () => { addMenu.classList.add('hidden'); overdraftModal(); });
+  byId('menuNewLoan').addEventListener('click', () => { addMenu.classList.add('hidden'); loanModal(); });
   byId('menuNewTx').addEventListener('click', () => { addMenu.classList.add('hidden'); newTransactionModal(); });
   byId('emptyAddBtn').addEventListener('click', () => newCardModal());
+  byId('emptyBanksBtn').addEventListener('click', () => banksModal());
 
   // Dışarı tıklayınca menüleri kapat
   document.addEventListener('click', () => {
@@ -127,6 +141,7 @@ function bindCalendar() {
 }
 
 function bindSettings() {
+  byId('manageBanksBtn').addEventListener('click', () => banksModal());
   byId('addRecurringBtn').addEventListener('click', () => recurringModal());
   byId('exportBtn').addEventListener('click', () => Backup.exportJSON());
   byId('exportCsvBtn').addEventListener('click', () => Backup.exportCSV());

@@ -27,6 +27,14 @@ export const Calc = {
     return Math.round((date - this.today()) / 86400000);
   },
 
+  /** Tarihe ay ekler; ayın gün sayısını aşan günler son güne sabitlenir (31 Ocak + 1 ay = 28/29 Şubat). */
+  addMonths(date, months) {
+    // Önce ayın 1'ine gidilir; doğrudan gün eklenirse 31 Ocak + 1 ay 3 Mart'a taşar
+    const base = new Date(date.getFullYear(), date.getMonth() + months, 1);
+    const y = base.getFullYear(), m = base.getMonth();
+    return new Date(y, m, this.clampDay(y, m, date.getDate()));
+  },
+
   /** Verilen ay-günün bugünden önceki en son gerçekleşme tarihi. */
   lastOccurrence(dayOfMonth, from = this.today()) {
     const y = from.getFullYear(), m = from.getMonth();
@@ -249,10 +257,112 @@ export const Calc = {
     };
   },
 
+  /**
+   * Bir ihtiyaç kredisinin durumu.
+   *
+   * Kalan borç, kalan taksitlerin toplamıdır: kredi faizi taksite zaten gömülü
+   * olduğu için anaparadan ayrı bir faiz projeksiyonu yapılmaz.
+   *
+   * Dönüş:
+   *   remainingCount — ödenmemiş taksit sayısı
+   *   remainingDebt  — kalan taksitlerin toplamı
+   *   totalPayback   — kredinin toplam geri ödemesi
+   *   totalInterest  — toplam geri ödeme − çekilen tutar
+   *   nextDue        — sıradan taksitin tarihi (bitmişse null)
+   *   lastDue        — son taksitin tarihi
+   *   overdueDays    — sıradaki taksitin gecikme günü (yoksa 0)
+   *   progress       — ödenen taksit oranı
+   */
+  loanSummary(loan) {
+    const first = safeDate(loan.firstPaymentDate) || this.today();
+    const remainingCount = Math.max(loan.totalInstallments - loan.paidInstallments, 0);
+    const totalPayback = loan.monthlyPayment * loan.totalInstallments;
+
+    const nextDue = remainingCount > 0 ? this.addMonths(first, loan.paidInstallments) : null;
+    const overdueDays = nextDue && nextDue < this.today()
+      ? Math.round((this.today() - nextDue) / 86400000)
+      : 0;
+
+    return {
+      remainingCount,
+      remainingDebt: Math.round(loan.monthlyPayment * remainingCount * 100) / 100,
+      totalPayback: Math.round(totalPayback * 100) / 100,
+      totalInterest: Math.round(Math.max(totalPayback - loan.principal, 0) * 100) / 100,
+      nextDue,
+      lastDue: this.addMonths(first, loan.totalInstallments - 1),
+      overdueDays,
+      isFinished: remainingCount === 0,
+      progress: loan.totalInstallments > 0 ? loan.paidInstallments / loan.totalInstallments : 0
+    };
+  },
+
+  /** Avans hesabın limit kullanım oranı. */
+  overdraftUsage(od) {
+    return od.limit > 0 ? od.currentDebt / od.limit : 0;
+  },
+
+  /**
+   * Banka bazında gruplanmış ürünler (borcu büyük banka üstte).
+   * Panel bu listeyi doğrudan çizer; ürünü olmayan bankalar gösterilmez.
+   */
+  bankGroups() {
+    return Store.data.banks
+      .map(bank => {
+        const cards = Store.data.cards.filter(c => c.bankId === bank.id);
+        const overdrafts = Store.data.overdrafts.filter(o => o.bankId === bank.id);
+        const loans = Store.data.loans.filter(l => l.bankId === bank.id);
+
+        const cardDebt = cards.reduce((s, c) => s + c.currentDebt, 0);
+        const odDebt = overdrafts.reduce((s, o) => s + o.currentDebt, 0);
+        const loanDebt = loans.reduce((s, l) => s + this.loanSummary(l).remainingDebt, 0);
+        const limit = cards.reduce((s, c) => s + c.limit, 0) + overdrafts.reduce((s, o) => s + o.limit, 0);
+        const revolvingDebt = cardDebt + odDebt;
+
+        return {
+          bank, cards, overdrafts, loans,
+          count: cards.length + overdrafts.length + loans.length,
+          cardDebt, odDebt,
+          loanDebt: Math.round(loanDebt * 100) / 100,
+          debt: Math.round((revolvingDebt + loanDebt) * 100) / 100,
+          limit,
+          available: Math.max(limit - revolvingDebt, 0),
+          usage: limit > 0 ? revolvingDebt / limit : 0
+        };
+      })
+      .filter(g => g.count > 0)
+      .sort((a, b) => b.debt - a.debt);
+  },
+
+  /** Kredilerin toplam kalan borcu ve aylık taksit yükü. */
+  loanTotals() {
+    let remainingDebt = 0, monthly = 0, active = 0;
+    Store.data.loans.forEach(l => {
+      const s = this.loanSummary(l);
+      if (s.isFinished) return;
+      remainingDebt += s.remainingDebt;
+      monthly += l.monthlyPayment;
+      active += 1;
+    });
+    return {
+      remainingDebt: Math.round(remainingDebt * 100) / 100,
+      monthly: Math.round(monthly * 100) / 100,
+      active
+    };
+  },
+
   totals() {
     const cards = Store.data.cards;
-    const limit = cards.reduce((s, c) => s + c.limit, 0);
-    const debt = cards.reduce((s, c) => s + c.currentDebt, 0);
+    const overdrafts = Store.data.overdrafts;
+
+    const cardLimit = cards.reduce((s, c) => s + c.limit, 0);
+    const cardDebt = cards.reduce((s, c) => s + c.currentDebt, 0);
+    const odLimit = overdrafts.reduce((s, o) => s + o.limit, 0);
+    const odDebt = overdrafts.reduce((s, o) => s + o.currentDebt, 0);
+
+    // Limit kullanımı yalnızca rotatif ürünler içindir; kredinin limiti yoktur
+    const limit = cardLimit + odLimit;
+    const debt = cardDebt + odDebt;
+    const loans = this.loanTotals();
 
     // Yalnızca ekstresi kesilmiş ve asgarisi henüz karşılanmamış kartlar
     let minPay = 0, minPayCards = 0;
@@ -262,7 +372,10 @@ export const Calc = {
     });
 
     return {
-      limit, debt,
+      limit, debt, cardLimit, cardDebt, odLimit, odDebt,
+      loanDebt: loans.remainingDebt,
+      loanMonthly: loans.monthly,
+      totalDebt: Math.round((debt + loans.remainingDebt) * 100) / 100,
       available: Math.max(limit - debt, 0),
       minPay: Math.round(minPay * 100) / 100,
       minPayCards,
@@ -308,17 +421,35 @@ export const Calc = {
     return { items, total: Math.round(total * 100) / 100 };
   },
 
-  /** Kart bazlı borç dağılımı (borcu olan kartlar, büyükten küçüğe). */
+  /** Ürün bazlı borç dağılımı: kartlar, avans hesaplar ve krediler (büyükten küçüğe). */
   cardBreakdown() {
-    const items = Store.data.cards
-      .filter(c => c.currentDebt > 0)
-      .map(c => ({
-        id: c.id,
-        label: c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''),
-        amount: c.currentDebt,
-        color: c.color[1]
-      }))
-      .sort((a, b) => b.amount - a.amount);
+    const items = [
+      ...Store.data.cards
+        .filter(c => c.currentDebt > 0)
+        .map(c => ({
+          id: c.id, kind: 'card',
+          label: c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''),
+          amount: c.currentDebt,
+          color: c.color[1]
+        })),
+      ...Store.data.overdrafts
+        .filter(o => o.currentDebt > 0)
+        .map(o => ({
+          id: o.id, kind: 'overdraft',
+          label: o.bankName + ' — ' + o.label,
+          amount: o.currentDebt,
+          color: o.color[1]
+        })),
+      ...Store.data.loans
+        .map(l => ({ loan: l, s: this.loanSummary(l) }))
+        .filter(x => x.s.remainingDebt > 0)
+        .map(x => ({
+          id: x.loan.id, kind: 'loan',
+          label: x.loan.bankName + ' — ' + x.loan.label,
+          amount: x.s.remainingDebt,
+          color: x.loan.color[1]
+        }))
+    ].sort((a, b) => b.amount - a.amount);
 
     const total = items.reduce((s, i) => s + i.amount, 0);
     items.forEach(i => { i.share = total > 0 ? i.amount / total : 0; });
@@ -368,7 +499,8 @@ export const Calc = {
    */
   notifications() {
     const threshold = Store.data.settings.notificationThresholdDays;
-    return Store.data.cards
+
+    const cardItems = Store.data.cards
       .map(c => {
         const st = this.statementSummary(c);
         // Ekstre kesilmediyse ya da asgari ödendiyse hatırlatılacak bir şey yok
@@ -377,27 +509,73 @@ export const Calc = {
         const overdue = this.overdueInfo(c);
         const days = overdue ? -overdue.days : this.daysUntil(st.dueDate);
         return {
+          kind: 'card',
+          id: c.id,
           card: c,
+          title: c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''),
+          amount: st.remainingMin,
+          totalDebt: c.currentDebt,
           due: overdue ? overdue.due : st.dueDate,
           days,
           overdue: !!overdue,
-          amount: st.remainingMin,
           // Rozet yalnızca acil olanları sayar; kesilmiş ekstreler listede yine görünür
           urgent: !!overdue || days <= threshold
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.days - b.days);
+      .filter(Boolean);
+
+    /* Krediler: sıradaki taksit eşiğe girdiyse ya da geciktiyse hatırlatılır */
+    const loanItems = Store.data.loans
+      .map(l => {
+        const s = this.loanSummary(l);
+        if (s.isFinished || !s.nextDue) return null;
+
+        const days = s.overdueDays > 0 ? -s.overdueDays : this.daysUntil(s.nextDue);
+        if (days > threshold) return null;
+        return {
+          kind: 'loan',
+          id: l.id,
+          loan: l,
+          title: l.bankName + ' — ' + l.label,
+          amount: l.monthlyPayment,
+          totalDebt: s.remainingDebt,
+          due: s.nextDue,
+          days,
+          overdue: s.overdueDays > 0,
+          urgent: true
+        };
+      })
+      .filter(Boolean);
+
+    return [...cardItems, ...loanItems].sort((a, b) => a.days - b.days);
   },
 
-  /** Yaklaşan ödemeler: yalnızca ekstresi kesilmiş ve asgarisi henüz ödenmemiş kartlar. */
+  /**
+   * Yaklaşan ödemeler: ekstresi kesilmiş ve asgarisi ödenmemiş kartlar
+   * ile taksit tarihi yaklaşan krediler.
+   */
   upcomingPayments(withinDays = 7) {
-    return Store.data.cards
-      .map(c => {
-        const st = this.statementSummary(c);
-        if (!st.hasStatement || st.isMinPaid) return null;
-        return { card: c, due: st.dueDate, days: this.daysUntil(st.dueDate), amount: st.remainingMin, statement: st };
-      })
+    const cards = Store.data.cards.map(c => {
+      const st = this.statementSummary(c);
+      if (!st.hasStatement || st.isMinPaid) return null;
+      return {
+        kind: 'card', card: c,
+        title: c.bankName + (c.cardLabel ? ' — ' + c.cardLabel : ''),
+        due: st.dueDate, days: this.daysUntil(st.dueDate), amount: st.remainingMin, statement: st
+      };
+    });
+
+    const loans = Store.data.loans.map(l => {
+      const s = this.loanSummary(l);
+      if (s.isFinished || !s.nextDue) return null;
+      return {
+        kind: 'loan', loan: l,
+        title: l.bankName + ' — ' + l.label,
+        due: s.nextDue, days: this.daysUntil(s.nextDue), amount: l.monthlyPayment
+      };
+    });
+
+    return [...cards, ...loans]
       .filter(n => n && n.days >= 0 && n.days <= withinDays)
       .sort((a, b) => a.days - b.days);
   },
@@ -410,7 +588,14 @@ export const Calc = {
    */
   debtSeries(rangeDays) {
     const today = this.today();
-    const totalNow = Store.data.cards.reduce((s, c) => s + c.currentDebt, 0);
+    /*
+     * Avans ve kredi borçlarının işlem geçmişi yoktur; günlük seyirleri türetilemez.
+     * Grafik toplam borcu göstermeye devam etsin diye bugünkü tutarları sabit taban
+     * olarak eklenir — eğri yalnızca kart hareketleriyle şekillenir.
+     */
+    const baseline = Store.data.overdrafts.reduce((s, o) => s + o.currentDebt, 0)
+      + this.loanTotals().remainingDebt;
+    const totalNow = Store.data.cards.reduce((s, c) => s + c.currentDebt, 0) + baseline;
     const txs = Store.data.transactions;
 
     // Başlangıç: aralık verildiyse o kadar gün, yoksa ilk işlemden (veya ilk karttan) bugüne

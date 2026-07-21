@@ -16,7 +16,10 @@ export const Store = {
 
   defaults() {
     return {
+      banks: [],
       cards: [],
+      overdrafts: [],
+      loans: [],
       transactions: [],
       recurring: [],
       settings: {
@@ -41,6 +44,14 @@ export const Store = {
     // Aylık bütçe: 0 = kapalı; bozuk/negatif değerler kapalı sayılır
     out.settings.monthlyBudget = num(out.settings.monthlyBudget) > 0 ? num(out.settings.monthlyBudget) : 0;
 
+    out.banks = (Array.isArray(out.banks) ? out.banks : [])
+      .filter(b => b && typeof b === 'object' && String(b.name || '').trim())
+      .map(b => ({
+        id: b.id || this.uid(),
+        name: String(b.name).trim(),
+        createdAt: safeDate(b.createdAt) ? b.createdAt : new Date().toISOString()
+      }));
+
     out.cards = (Array.isArray(out.cards) ? out.cards : [])
       .filter(c => c && typeof c === 'object')
       .map((c, i) => Object.assign({}, c, {
@@ -59,6 +70,72 @@ export const Store = {
           : CONFIG.cardGradients[i % CONFIG.cardGradients.length],
         createdAt: safeDate(c.createdAt) ? c.createdAt : new Date().toISOString()
       }));
+
+    /*
+     * Banka artık ayrı bir varlık; eski yedeklerde yalnızca kart üstünde serbest metin olarak var.
+     * Kart/avans/kredi tekil bir bankaya bağlanabilsin diye adı geçen her banka burada üretilir.
+     */
+    const bankByName = new Map(out.banks.map(b => [b.name.toLocaleLowerCase('tr-TR'), b]));
+    const ensureBank = name => {
+      const clean = String(name || '').trim() || 'Bilinmeyen banka';
+      const key = clean.toLocaleLowerCase('tr-TR');
+      let bank = bankByName.get(key);
+      if (!bank) {
+        bank = { id: this.uid(), name: clean, createdAt: new Date().toISOString() };
+        out.banks.push(bank);
+        bankByName.set(key, bank);
+      }
+      return bank;
+    };
+    const bankIds = new Set(out.banks.map(b => b.id));
+
+    out.cards.forEach(c => {
+      const bank = bankIds.has(c.bankId) ? out.banks.find(b => b.id === c.bankId) : ensureBank(c.bankName);
+      c.bankId = bank.id;
+      c.bankName = bank.name; // gösterim hep banka kaydından türer, kopya güncel tutulur
+    });
+
+    out.overdrafts = (Array.isArray(out.overdrafts) ? out.overdrafts : [])
+      .filter(o => o && typeof o === 'object')
+      .map((o, i) => {
+        const bank = bankIds.has(o.bankId) ? out.banks.find(b => b.id === o.bankId) : ensureBank(o.bankName);
+        return Object.assign({}, o, {
+          id: o.id || this.uid(),
+          bankId: bank.id,
+          bankName: bank.name,
+          label: String(o.label || 'Avans hesap'),
+          limit: num(o.limit),
+          currentDebt: Math.max(0, num(o.currentDebt)),
+          interestRate: Math.min(Math.max(num(o.interestRate, CONFIG.defaultOverdraftRate), 0), 1),
+          color: Array.isArray(o.color) && o.color.length === 2
+            ? o.color
+            : CONFIG.cardGradients[(i + 2) % CONFIG.cardGradients.length],
+          createdAt: safeDate(o.createdAt) ? o.createdAt : new Date().toISOString()
+        });
+      });
+
+    out.loans = (Array.isArray(out.loans) ? out.loans : [])
+      .filter(l => l && typeof l === 'object')
+      .map((l, i) => {
+        const bank = bankIds.has(l.bankId) ? out.banks.find(b => b.id === l.bankId) : ensureBank(l.bankName);
+        const total = Math.min(Math.max(parseInt(l.totalInstallments, 10) || 1, 1), 360);
+        return Object.assign({}, l, {
+          id: l.id || this.uid(),
+          bankId: bank.id,
+          bankName: bank.name,
+          label: String(l.label || 'İhtiyaç kredisi'),
+          principal: num(l.principal),
+          monthlyPayment: num(l.monthlyPayment),
+          totalInstallments: total,
+          // Ödenen taksit toplamı aşamaz; aşarsa kalan borç negatife düşerdi
+          paidInstallments: Math.min(Math.max(parseInt(l.paidInstallments, 10) || 0, 0), total),
+          firstPaymentDate: safeDate(l.firstPaymentDate) ? l.firstPaymentDate : new Date().toISOString(),
+          color: Array.isArray(l.color) && l.color.length === 2
+            ? l.color
+            : CONFIG.cardGradients[(i + 4) % CONFIG.cardGradients.length],
+          createdAt: safeDate(l.createdAt) ? l.createdAt : new Date().toISOString()
+        });
+      });
 
     const cardIds = new Set(out.cards.map(c => c.id));
     out.transactions = (Array.isArray(out.transactions) ? out.transactions : [])
@@ -151,9 +228,140 @@ export const Store = {
     return raw;
   },
 
+  /* ---------- bankalar ---------- */
+
+  bank(id) {
+    return this.data.banks.find(b => b.id === id) || null;
+  },
+
+  bankName(id) {
+    const b = this.bank(id);
+    return b ? b.name : 'Bilinmeyen banka';
+  },
+
+  /** Ada göre bankayı bulur, yoksa ekler. Aynı banka iki kez listelenmesin diye ad karşılaştırması harf duyarsızdır. */
+  ensureBank(name) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const key = clean.toLocaleLowerCase('tr-TR');
+    const found = this.data.banks.find(b => b.name.toLocaleLowerCase('tr-TR') === key);
+    if (found) return found;
+
+    const bank = { id: this.uid(), name: clean, createdAt: new Date().toISOString() };
+    this.data.banks.push(bank);
+    return bank;
+  },
+
+  /**
+   * Ayarlardaki banka listesini verilen adlarla eşitler.
+   * Ürünü olan bankalar listeden çıkarılamaz; çıkarılsaydı kart ve krediler sahipsiz kalırdı.
+   * Dönüş: { removed, kept } — kept, ürünü olduğu için korunan banka adları.
+   */
+  syncBanks(names) {
+    const wanted = new Map();
+    names.forEach(n => {
+      const clean = String(n || '').trim();
+      if (clean) wanted.set(clean.toLocaleLowerCase('tr-TR'), clean);
+    });
+
+    const kept = [];
+    this.data.banks = this.data.banks.filter(b => {
+      if (wanted.has(b.name.toLocaleLowerCase('tr-TR'))) return true;
+      if (this.bankProductCount(b.id) > 0) { kept.push(b.name); return true; }
+      return false;
+    });
+
+    const existing = new Set(this.data.banks.map(b => b.name.toLocaleLowerCase('tr-TR')));
+    wanted.forEach((name, key) => {
+      if (!existing.has(key)) {
+        this.data.banks.push({ id: this.uid(), name, createdAt: new Date().toISOString() });
+      }
+    });
+
+    return { kept, saved: this.save() };
+  },
+
+  bankProductCount(bankId) {
+    return this.data.cards.filter(c => c.bankId === bankId).length
+      + this.data.overdrafts.filter(o => o.bankId === bankId).length
+      + this.data.loans.filter(l => l.bankId === bankId).length;
+  },
+
+  renameBank(id, name) {
+    const bank = this.bank(id);
+    const clean = String(name || '').trim();
+    if (!bank || !clean) return false;
+    bank.name = clean;
+    // bankName yalnızca gösterim kopyasıdır; banka adı değişince birlikte taşınır
+    [this.data.cards, this.data.overdrafts, this.data.loans].forEach(list =>
+      list.forEach(p => { if (p.bankId === id) p.bankName = clean; }));
+    return this.save();
+  },
+
+  /* ---------- avans (kredili mevduat) hesapları ---------- */
+
+  addOverdraft(od) {
+    od.id = this.uid();
+    od.createdAt = new Date().toISOString();
+    od.bankName = this.bankName(od.bankId);
+    od.color = CONFIG.cardGradients[(this.data.overdrafts.length + 2) % CONFIG.cardGradients.length];
+    this.data.overdrafts.push(od);
+    return this.save();
+  },
+
+  updateOverdraft(id, patch) {
+    const o = this.data.overdrafts.find(x => x.id === id);
+    if (!o) return false;
+    Object.assign(o, patch);
+    if (patch.bankId) o.bankName = this.bankName(patch.bankId);
+    o.currentDebt = Math.max(0, num(o.currentDebt));
+    return this.save();
+  },
+
+  deleteOverdraft(id) {
+    this.data.overdrafts = this.data.overdrafts.filter(o => o.id !== id);
+    return this.save();
+  },
+
+  /* ---------- ihtiyaç kredileri ---------- */
+
+  addLoan(loan) {
+    loan.id = this.uid();
+    loan.createdAt = new Date().toISOString();
+    loan.bankName = this.bankName(loan.bankId);
+    loan.color = CONFIG.cardGradients[(this.data.loans.length + 4) % CONFIG.cardGradients.length];
+    this.data.loans.push(loan);
+    return this.save();
+  },
+
+  updateLoan(id, patch) {
+    const l = this.data.loans.find(x => x.id === id);
+    if (!l) return false;
+    Object.assign(l, patch);
+    if (patch.bankId) l.bankName = this.bankName(patch.bankId);
+    l.paidInstallments = Math.min(Math.max(parseInt(l.paidInstallments, 10) || 0, 0), l.totalInstallments);
+    return this.save();
+  },
+
+  /** Bir taksiti ödenmiş işaretler (delta -1 ile geri alınır). */
+  payLoanInstallment(id, delta = 1) {
+    const l = this.data.loans.find(x => x.id === id);
+    if (!l) return false;
+    const next = l.paidInstallments + delta;
+    if (next < 0 || next > l.totalInstallments) return false;
+    l.paidInstallments = next;
+    return this.save();
+  },
+
+  deleteLoan(id) {
+    this.data.loans = this.data.loans.filter(l => l.id !== id);
+    return this.save();
+  },
+
   addCard(card) {
     card.id = this.uid();
     card.createdAt = new Date().toISOString();
+    card.bankName = this.bankName(card.bankId);
     card.color = CONFIG.cardGradients[this.data.cards.length % CONFIG.cardGradients.length];
     // Kart eklenirken girilen mevcut borç, sonraki hesaplamaların başlangıç noktasıdır
     card.openingDebt = num(card.currentDebt);
@@ -165,6 +373,7 @@ export const Store = {
     const c = this.data.cards.find(x => x.id === id);
     if (!c) return false;
     Object.assign(c, patch);
+    if (patch.bankId) c.bankName = this.bankName(patch.bankId);
     return this.save();
   },
 
@@ -295,7 +504,10 @@ export const Store = {
    */
   snapshot() {
     return JSON.parse(JSON.stringify({
+      banks: this.data.banks,
       cards: this.data.cards,
+      overdrafts: this.data.overdrafts,
+      loans: this.data.loans,
       transactions: this.data.transactions,
       recurring: this.data.recurring
     }));
@@ -306,6 +518,9 @@ export const Store = {
     if (!snap) return false;
     this.data.cards = snap.cards;
     this.data.transactions = snap.transactions;
+    if (snap.banks) this.data.banks = snap.banks;
+    if (snap.overdrafts) this.data.overdrafts = snap.overdrafts;
+    if (snap.loans) this.data.loans = snap.loans;
     if (snap.recurring) this.data.recurring = snap.recurring;
     return this.save();
   }

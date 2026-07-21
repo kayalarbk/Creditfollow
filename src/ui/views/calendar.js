@@ -52,15 +52,33 @@ export function renderCalendar() {
   }
 }
 
-/** gün -> [{type:'statement'|'due', card}] haritası. */
+/** gün -> [{type:'statement'|'due'|'loan', ...}] haritası. */
 function collectEvents(y, m) {
   const events = {};
+  const push = (day, ev) => (events[day] = events[day] || []).push(ev);
+
   Store.data.cards.forEach(card => {
-    const sd = Calc.clampDay(y, m, card.statementDay);
-    const dd = Calc.clampDay(y, m, card.dueDay);
-    (events[sd] = events[sd] || []).push({ type: 'statement', card });
-    (events[dd] = events[dd] || []).push({ type: 'due', card });
+    push(Calc.clampDay(y, m, card.statementDay), { type: 'statement', card });
+    push(Calc.clampDay(y, m, card.dueDay), { type: 'due', card });
   });
+
+  /* Kredi taksitleri: yalnızca ödeme planı bu aya denk gelen taksitler işaretlenir */
+  const monthStart = new Date(y, m, 1);
+  const monthEnd = new Date(y, m + 1, 1);
+  Store.data.loans.forEach(loan => {
+    const s = Calc.loanSummary(loan);
+    const first = new Date(loan.firstPaymentDate);
+    if (isNaN(first)) return;
+
+    // Bu ayın kaçıncı taksite denk geldiği: ilk ödemeden bu yana geçen ay sayısı
+    const index = (y - first.getFullYear()) * 12 + (m - first.getMonth());
+    if (index < 0 || index >= loan.totalInstallments) return;
+
+    const date = Calc.addMonths(first, index);
+    if (date < monthStart || date >= monthEnd) return;
+    push(date.getDate(), { type: 'loan', loan, index, summary: s });
+  });
+
   return events;
 }
 
@@ -68,7 +86,8 @@ function buildDots(evs, isToday) {
   const dots = el('div', 'flex items-center gap-0.5');
   const counts = [
     { n: evs.filter(e => e.type === 'statement').length, dot: 'bg-warn', text: isToday ? 'text-white/90' : 'text-yellow-600 dark:text-warn' },
-    { n: evs.filter(e => e.type === 'due').length, dot: 'bg-danger', text: isToday ? 'text-white/90' : 'text-danger' }
+    { n: evs.filter(e => e.type === 'due').length, dot: 'bg-danger', text: isToday ? 'text-white/90' : 'text-danger' },
+    { n: evs.filter(e => e.type === 'loan').length, dot: 'bg-accent', text: isToday ? 'text-white/90' : 'text-accent' }
   ];
   counts.forEach(({ n, dot, text }) => {
     if (!n) return;
@@ -94,16 +113,32 @@ function renderCalDetail(evs, date) {
   panel.appendChild(el('h3', 'font-bold mb-3', fmtDate.format(date)));
 
   evs.forEach(ev => {
-    const isDue = ev.type === 'due';
     const row = el('div', 'flex items-center gap-3 py-2.5 border-b border-black/5 dark:border-white/5 last:border-0');
     const box = el('div', 'flex-1 min-w-0');
-    box.append(
-      el('p', 'text-sm font-semibold truncate', ev.card.bankName + ' — ' + (isDue ? 'Son ödeme günü' : 'Hesap kesim günü')),
-      isDue
-        ? el('p', 'text-xs text-gray-500 dark:text-gray-400 num', dueSummary(ev.card))
-        : el('p', 'text-xs text-gray-500 dark:text-gray-400', 'Bu tarihte dönem borcu hesaplanır.')
-    );
-    row.append(el('span', 'cal-dot shrink-0 ' + (isDue ? 'bg-danger' : 'bg-warn')), box);
+    let dot;
+
+    if (ev.type === 'loan') {
+      const paid = ev.index < ev.loan.paidInstallments;
+      dot = 'bg-accent';
+      box.append(
+        el('p', 'text-sm font-semibold truncate',
+          ev.loan.bankName + ' — ' + (ev.index + 1) + '. kredi taksiti'),
+        el('p', 'text-xs num ' + (paid ? 'text-ok' : 'text-gray-500 dark:text-gray-400'),
+          fmtTL.format(ev.loan.monthlyPayment) + ' · ' +
+          (paid ? 'ödendi olarak işaretli' : ev.loan.totalInstallments + ' taksitten ' + (ev.index + 1) + '.'))
+      );
+    } else {
+      const isDue = ev.type === 'due';
+      dot = isDue ? 'bg-danger' : 'bg-warn';
+      box.append(
+        el('p', 'text-sm font-semibold truncate', ev.card.bankName + ' — ' + (isDue ? 'Son ödeme günü' : 'Hesap kesim günü')),
+        isDue
+          ? el('p', 'text-xs text-gray-500 dark:text-gray-400 num', dueSummary(ev.card))
+          : el('p', 'text-xs text-gray-500 dark:text-gray-400', 'Bu tarihte dönem borcu hesaplanır.')
+      );
+    }
+
+    row.append(el('span', 'cal-dot shrink-0 ' + dot), box);
     panel.appendChild(row);
   });
 

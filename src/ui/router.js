@@ -33,7 +33,7 @@ export function switchView(name) {
 
 /** Veri değiştiğinde çağrılan tam yeniden çizim. */
 export function renderAll() {
-  const has = Store.data.cards.length > 0;
+  const has = Store.data.cards.length + Store.data.overdrafts.length + Store.data.loans.length > 0;
   byId('emptyState').classList.toggle('hidden', has);
   byId('dashContent').classList.toggle('hidden', !has);
 

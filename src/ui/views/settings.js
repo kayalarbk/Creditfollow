@@ -1,7 +1,7 @@
 import { Store } from '../../core/store.js';
 import { AutoBackup } from '../../core/autobackup.js';
 import { el, byId, clear } from '../../utils/dom.js';
-import { fmtTL, fmtDate, category } from '../../utils/format.js';
+import { fmtTL, fmtDate, category, bankIcon } from '../../utils/format.js';
 import { recurringModal } from '../modals/recurring.js';
 import { toast } from '../toast.js';
 
@@ -13,7 +13,45 @@ export function renderSettings() {
     ? 'Son yedek: ' + fmtDate.format(new Date(last))
     : 'Henüz yedek alınmadı.';
   renderAutoBackup();
+  renderBanks();
   renderRecurring();
+}
+
+/** Seçili bankalar ve her birindeki ürün dökümü. */
+function renderBanks() {
+  const box = clear(byId('banksList'));
+  const banks = [...Store.data.banks].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+  if (banks.length === 0) {
+    box.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500 py-2',
+      'Henüz banka seçilmedi. "Düzenle" ile çalıştığınız bankaları işaretleyin.'));
+    return;
+  }
+
+  banks.forEach(bank => {
+    const cards = Store.data.cards.filter(c => c.bankId === bank.id).length;
+    const ods = Store.data.overdrafts.filter(o => o.bankId === bank.id).length;
+    const loans = Store.data.loans.filter(l => l.bankId === bank.id).length;
+
+    const parts = [];
+    if (cards) parts.push(cards + ' kart');
+    if (ods) parts.push(ods + ' avans hesap');
+    if (loans) parts.push(loans + ' kredi');
+
+    const row = el('div', 'flex items-center gap-3 p-3 rounded-xl bg-black/[.03] dark:bg-white/5');
+    const ic = el('div', 'w-9 h-9 rounded-xl bg-accent/10 text-accent grid place-items-center shrink-0');
+    ic.appendChild(el('i', 'fa-solid ' + bankIcon(bank.name) + ' text-sm'));
+
+    const mid = el('div', 'flex-1 min-w-0');
+    mid.append(
+      el('p', 'text-sm font-medium truncate', bank.name),
+      el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate',
+        parts.length ? parts.join(' · ') : 'Henüz ürün eklenmedi')
+    );
+
+    row.append(ic, mid);
+    box.appendChild(row);
+  });
 }
 
 /** Tekrarlayan işlem şablonları listesi. */

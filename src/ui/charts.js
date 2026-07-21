@@ -132,8 +132,13 @@ export const Charts = {
       });
     }
 
-    byId('donutCenter').textContent = fmtTL0.format(t.debt);
-    byId('donutSub').textContent = 'Toplam limit ' + fmtTL0.format(t.limit) + ' · Kalan ' + fmtTL0.format(t.available);
+    // Halka rotatif limit kullanımını gösterir; kredinin limiti olmadığı için
+    // merkezde toplam borç, altında ayrışımı verilir
+    byId('donutCenter').textContent = fmtTL0.format(t.totalDebt);
+    const parts = ['Kart & avans ' + fmtTL0.format(t.debt)];
+    if (t.loanDebt > 0) parts.push('Kredi ' + fmtTL0.format(t.loanDebt));
+    parts.push('Kalan limit ' + fmtTL0.format(t.available));
+    byId('donutSub').textContent = parts.join(' · ');
   },
 
   renderCategory() {

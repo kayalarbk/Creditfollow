@@ -11,6 +11,15 @@ export const CONFIG = {
   minPaymentRates: [0.20, 0.40],
   /* Aylık akdi faiz oranı (%). Oranlar TCMB tebliğiyle değiştiği için kart bazında düzenlenebilir. */
   defaultInterestRate: 0.0425,
+  /* Avans (kredili mevduat) hesapları kart faizinden yüksek işler; ayrı varsayılan tutulur. */
+  defaultOverdraftRate: 0.055,
+
+  /* Ürün türleri — id veri dosyasına yazılmaz, gösterim ve gruplama içindir */
+  productTypes: {
+    card: { label: 'Kredi kartı', icon: 'fa-credit-card', color: '#0A84FF' },
+    overdraft: { label: 'Avans hesap', icon: 'fa-building-columns', color: '#FF9F0A' },
+    loan: { label: 'İhtiyaç kredisi', icon: 'fa-file-invoice-dollar', color: '#BF5AF2' }
+  },
   cardGradients: [
     ['#1e3a8a', '#3b82f6'], ['#111827', '#4b5563'], ['#7c2d12', '#ea580c'],
     ['#14532d', '#22c55e'], ['#581c87', '#a855f7'], ['#831843', '#ec4899'],

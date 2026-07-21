@@ -21,8 +21,10 @@ function csvCell(value) {
  */
 export function applyAutoRestore(parsed) {
   if (!parsed) return false;
-  const hasLocal = Store.data.cards.length > 0 || Store.data.transactions.length > 0;
-  const hasFile = parsed.cards.length > 0 || parsed.transactions.length > 0;
+  const filled = d => ['cards', 'overdrafts', 'loans', 'transactions']
+    .some(k => Array.isArray(d[k]) && d[k].length > 0);
+  const hasLocal = filled(Store.data);
+  const hasFile = filled(parsed);
   if (hasLocal || !hasFile) return false;
 
   Store.data = Store.normalize(parsed);

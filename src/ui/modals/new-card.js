@@ -2,7 +2,8 @@ import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, parseAmount } from '../../utils/format.js';
-import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
+import { openModal, closeModal, modalHeader, field, input, primaryButton, showErr, clearErrs } from '../modal.js';
+import { bankSelect } from '../bank-select.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 
@@ -26,24 +27,7 @@ export function newCardModal(editId) {
       editing ? 'İşlem geçmişiniz korunur.' : 'Kart bilgilerini girin, panel otomatik güncellenir.');
     const body = el('div', 'px-6 pb-6 space-y-4');
 
-    /* Banka: liste + "Diğer" için serbest metin */
-    const bankWrap = el('div', 'space-y-2');
-    const bank = select();
-    const ph = el('option', '', 'Banka seçin…');
-    ph.value = ''; ph.disabled = true; ph.selected = true;
-    bank.appendChild(ph);
-    CONFIG.banks.forEach(b => {
-      const o = el('option', '', b);
-      o.value = b;
-      bank.appendChild(o);
-    });
-    const bankCustom = input({ type: 'text', placeholder: 'Banka adını yazın', maxlength: '40' });
-    bankCustom.classList.add('hidden');
-    bank.addEventListener('change', () => {
-      bankCustom.classList.toggle('hidden', bank.value !== 'Diğer');
-      if (bank.value === 'Diğer') bankCustom.focus();
-    });
-    bankWrap.append(bank, bankCustom);
+    const bank = bankSelect(editing ? editing.bankId : null);
 
     const label = input({ type: 'text', placeholder: 'örn. Bonus Platinum (opsiyonel)', maxlength: '40' });
     const limit = input({ type: 'text', inputmode: 'decimal', placeholder: 'örn. 50.000' });
@@ -75,12 +59,6 @@ export function newCardModal(editId) {
 
     /* Düzenlemede mevcut değerler yüklenir */
     if (editing) {
-      const known = CONFIG.banks.includes(editing.bankName);
-      bank.value = known ? editing.bankName : 'Diğer';
-      if (!known) {
-        bankCustom.value = editing.bankName;
-        bankCustom.classList.remove('hidden');
-      }
       label.value = editing.cardLabel || '';
       limit.value = amountValue(editing.limit);
       stDay.value = String(editing.statementDay);
@@ -96,8 +74,11 @@ export function newCardModal(editId) {
     const debtField = field('Mevcut borç (₺)', debt, 'err-debt');
     const submit = primaryButton(editing ? 'Değişikliği kaydet' : 'Kartı ekle');
 
+    const bankField = field('Banka', bank.wrap, 'err-bank');
+    if (bank.hint) bankField.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 mt-1.5', bank.hint));
+
     body.append(
-      field('Banka', bankWrap, 'err-bank'),
+      bankField,
       field('Kart etiketi', label),
       field('Kart limiti (₺)', limit, 'err-limit')
     );
@@ -119,12 +100,12 @@ export function newCardModal(editId) {
       clearErrs(box);
       let valid = true;
 
-      const bankV = bank.value === 'Diğer' ? bankCustom.value.trim() : bank.value;
+      const bankV = bank.resolve();
       const limitV = parseAmount(limit.value);
       const stV = parseInt(stDay.value, 10);
       const duV = parseInt(duDay.value, 10);
 
-      if (!bankV) { showErr('err-bank', bank.value === 'Diğer' ? 'Banka adını yazın.' : 'Listeden bir banka seçin.'); valid = false; }
+      if (!bankV) { showErr('err-bank', 'Bir banka seçin veya yeni banka adını yazın.'); valid = false; }
       if (isNaN(limitV) || limitV <= 0) { showErr('err-limit', 'Geçerli, pozitif bir limit girin.'); valid = false; }
       if (isNaN(stV) || stV < 1 || stV > 31) { showErr('err-st', '1–31 arası bir gün girin.'); valid = false; }
       if (isNaN(duV) || duV < 1 || duV > 31) { showErr('err-du', '1–31 arası bir gün girin.'); valid = false; }
@@ -146,7 +127,7 @@ export function newCardModal(editId) {
 
       const saved = editing
         ? Store.updateCard(editing.id, {
-            bankName: bankV,
+            bankId: bankV,
             cardLabel: label.value.trim(),
             limit: limitV,
             statementDay: stV,
@@ -155,7 +136,7 @@ export function newCardModal(editId) {
             interestRate: intPct / 100
           })
         : Store.addCard({
-            bankName: bankV,
+            bankId: bankV,
             cardLabel: label.value.trim(),
             limit: limitV,
             currentDebt: debtV,
@@ -168,7 +149,7 @@ export function newCardModal(editId) {
 
       closeModal();
       renderAll();
-      toast(editing ? 'Kart bilgileri güncellendi.' : bankV + ' kartı eklendi.');
+      toast(editing ? 'Kart bilgileri güncellendi.' : Store.bankName(bankV) + ' kartı eklendi.');
     });
   });
 }
