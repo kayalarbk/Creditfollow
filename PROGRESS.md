@@ -158,7 +158,10 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
       Karar verilmeli: geri yüklensin mi, yoksa silme commit'lensin mi?
 - [ ] Test altyapısı yok — en azından `calc.js` için birim testleri (ekstre dönemi,
       asgari ödeme, taksit dağılımı, faiz projeksiyonu) eklenmeli.
-- [ ] `refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.
+- [x] ~~`refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.~~
+      2026-07-22'de `main` ileri sarıldı (fast-forward) ve push'landı; iki dal da `2e787ef`.
+      Not: çalışma dalı hâlâ `refactor/proje-yapisi`; yeni işler burada yapılıp
+      `main` periyodik olarak ileri sarılıyor.
 - [ ] Tailwind CDN kullanılıyor — çevrimdışı çalışmayı garanti etmiyor; yerel kopya
       veya build adımı değerlendirilmeli.
 - [ ] İhtiyaç kredisi için ödeme planı (amortisman tablosu) detaylandırılabilir.
