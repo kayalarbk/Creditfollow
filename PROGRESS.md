@@ -49,6 +49,7 @@ tarayıcıda çalışan panel.
 | 2026-07-20 | `53f36ac` | **fix:** taksitli harcama ekstreye taksit taksit yansıyor |
 | 2026-07-22 | `91ba92e` | **feat:** avans hesap (kredili mevduat) ve ihtiyaç kredisi ürünleri; ürünler banka varlığı altında gruplandı |
 | 2026-07-22 | (bu commit) | **docs:** PROGRESS.md proje hafızası dosyası eklendi |
+| 2026-07-22 | (bu commit) | **fix:** geçmişe dönük borçla eklenen kartta, kart eklenmeden önce son ödeme günü geçmiş ekstre için gecikme uyarısı çıkmıyor; sonraki dönem bekleniyor |
 
 ### Mevcut özellik seti
 - **Panel (dashboard):** toplam borç/limit donutu, borç seyri grafiği, yaklaşan ödemeler,
@@ -140,6 +141,11 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
 7. **Asgari ödeme ekstre bazlı.** Toplam borç üzerinden değil, dönem ekstresi üzerinden
    hesaplanır ve ödeme yapıldıkça düşer (bkz. `3da2b37`).
 8. **Taksitli harcama ekstreye taksit taksit yansır**, tek seferde değil (`53f36ac`).
+8b. **Kart eklenmeden kapanmış ekstre atlanır (2026-07-22).** `statementSummary()`,
+   son ödeme tarihi `card.createdAt`'ten önceye düşen dönemi `preCard: true` ile
+   `hasStatement: false` döndürür. Gerekçe: geçmişe dönük borçla kart girildiğinde
+   o borç devreden bakiyedir, kullanıcının kaçırdığı bir ödeme değildir — uyarı
+   üretmek yanlış alarmdır. Uyarı bir sonraki kesimden itibaren başlar.
 9. **Otomatik yedek File System Access API ile.** İzin kalıcı değilse kullanıcıya
    "Yedek dosyasına bağlan" uyarısı gösterilir; tarayıcı verisi boşsa dosyadan geri yüklenir.
 10. **Tüm metinler Türkçe**, para/tarih biçimlemesi `Intl` ile `tr-TR`.

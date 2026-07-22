@@ -130,6 +130,7 @@ export const Calc = {
    *   remainingAll  — ekstre borcunun ödenmemiş kısmı
    *   isMinPaid     — asgari karşılandı mı
    *   isFullPaid    — ekstrenin tamamı ödendi mi
+   *   preCard       — dönem, kart panele eklenmeden önce kapandığı için atlandı
    */
   statementSummary(card) {
     const cutoff = this.lastOccurrence(card.statementDay);
@@ -162,6 +163,26 @@ export const Calc = {
     // Son ödeme tarihi, kesimden sonraki ilk ödeme günüdür
     const dueDate = this.nextOccurrence(card.dueDay, cutoff);
 
+    /*
+     * Geçmişe dönük borçla eklenen kart: son ödeme günü kart sisteme
+     * girilmeden önce geçmişse o ekstre kullanıcı için "kaçırılmış" değildir,
+     * girilen borç zaten devreden bakiyedir. Bu ekstre için uyarı üretilmez,
+     * bir sonraki dönem beklenir.
+     */
+    if (this.isPreCardStatement(card, dueDate)) {
+      return {
+        hasStatement: false,
+        cutoff,
+        dueDate: this.nextOccurrence(card.dueDay),
+        balance, paidSince,
+        // Ödenecek bir ekstre olmadığı için asgari yükümlülük de yoktur
+        minPayment: 0, remainingMin: 0, remainingAll: 0,
+        isMinPaid: false,
+        isFullPaid: false,
+        preCard: true
+      };
+    }
+
     return {
       hasStatement: balance > 0,
       cutoff, dueDate, balance, minPayment, paidSince,
@@ -169,6 +190,17 @@ export const Calc = {
       isMinPaid: balance > 0 && remainingMin <= 0,
       isFullPaid: balance > 0 && remainingAll <= 0
     };
+  },
+
+  /**
+   * Verilen son ödeme tarihi, kartın panele eklendiği günden önce mi?
+   * Kart eklenmeden kapanmış bir dönem için gecikme/uyarı üretilmemelidir.
+   */
+  isPreCardStatement(card, dueDate) {
+    const created = safeDate(card.createdAt);
+    if (!created) return false;
+    const createdDay = new Date(created.getFullYear(), created.getMonth(), created.getDate());
+    return dueDate < createdDay;
   },
 
   /**

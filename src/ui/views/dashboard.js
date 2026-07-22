@@ -329,7 +329,8 @@ function buildCard(card) {
   if (!st.hasStatement) {
     minRow.append(
       el('span', 'text-gray-500 dark:text-gray-400', 'Asgari ödeme'),
-      el('span', 'font-semibold text-gray-400 dark:text-gray-500', 'Ekstre kesilmedi')
+      el('span', 'font-semibold text-gray-400 dark:text-gray-500',
+        st.preCard ? 'Sonraki dönem bekleniyor' : 'Ekstre kesilmedi')
     );
   } else if (st.isFullPaid) {
     minRow.append(

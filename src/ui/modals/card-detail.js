@@ -56,7 +56,9 @@ export function cardDetailModal(cardId) {
 
     if (!st.hasStatement) {
       stBox.appendChild(el('p', 'text-sm text-gray-500 dark:text-gray-400',
-        'Bu kartın ödenmesi gereken kesilmiş ekstresi yok. Bir sonraki kesim: ' +
+        (st.preCard
+          ? 'Bu kart eklendiğinde dönemin son ödeme tarihi geçmişti; girilen borç devreden bakiye sayıldı. Bir sonraki kesim: '
+          : 'Bu kartın ödenmesi gereken kesilmiş ekstresi yok. Bir sonraki kesim: ') +
         fmtDate.format(Calc.nextOccurrence(card.statementDay)) + '.'));
     } else {
       stBox.append(
