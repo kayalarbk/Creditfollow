@@ -1,11 +1,13 @@
 import { CONFIG } from '../../config.js';
 import { Store } from '../../core/store.js';
+import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, parseAmount } from '../../utils/format.js';
-import { openModal, closeModal, modalHeader, field, input, primaryButton, showErr, clearErrs } from '../modal.js';
+import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
 import { bankSelect } from '../bank-select.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
+import { warnExceededGroups } from './limit-groups.js';
 
 /** Türkçe biçimli tutarı düzenleme alanına yazmak için ("1250.5" -> "1250,5"). */
 function amountValue(n) {
@@ -57,6 +59,69 @@ export function newCardModal(editId) {
     });
     paintRates();
 
+    /*
+     * Ortak limit havuzu seçimi.
+     * Havuz tek bankaya ait olduğu için seçenekler seçili bankaya göre süzülür;
+     * banka değişince seçim sıfırlanır. Yeni havuz, modal değiştirmeden
+     * (form verisi kaybolmasın diye) buradaki iki alanla oluşturulur.
+     */
+    const NEW_GROUP = '__newgroup__';
+    const groupSel = select();
+    const newGroupWrap = el('div', 'space-y-2 hidden');
+    const newGroupName = input({ type: 'text', placeholder: 'Havuz adı, örn. Ortak limit', maxlength: '40' });
+    const newGroupLimit = input({ type: 'text', inputmode: 'decimal', placeholder: 'Ortak limit (₺), örn. 100.000' });
+    newGroupWrap.append(newGroupName, newGroupLimit);
+    const groupHint = el('p', 'text-xs text-gray-400 dark:text-gray-500 mt-1.5');
+
+    const bankSelEl = bank.wrap.querySelector('select');
+    const currentBankId = () => (bankSelEl.value && bankSelEl.value !== '__new__' ? bankSelEl.value : null);
+
+    const paintGroupState = () => {
+      const isNew = groupSel.value === NEW_GROUP;
+      const picked = isNew ? null : Store.limitGroup(groupSel.value);
+      newGroupWrap.classList.toggle('hidden', !isNew);
+
+      // Havuzdaki kartın limiti havuzdan gelir; kendi limiti saklanır ama kullanılmaz
+      const pooled = isNew || !!picked;
+      limit.disabled = pooled;
+      limit.classList.toggle('opacity-60', pooled);
+      groupHint.textContent = picked
+        ? 'Bu kart "' + picked.name + '" havuzunu kullanıyor: ortak limit ' + fmtTL.format(picked.sharedLimit) + '.'
+        : isNew
+          ? 'Yeni havuz oluşturulacak ve bu kart havuza alınacak.'
+          : 'Kart kendi limitini kullanır. Aynı bankanın kartları tek limiti paylaşıyorsa havuz seçin.';
+    };
+
+    const paintGroups = (preferred) => {
+      groupSel.textContent = '';
+      const none = el('option', '', 'Havuz yok — kart kendi limitini kullanır');
+      none.value = '';
+      groupSel.appendChild(none);
+
+      const bankId = currentBankId();
+      Store.data.limitGroups
+        .filter(g => g.bankId === bankId)
+        .forEach(g => {
+          const o = el('option', '', g.name + ' · ' + fmtTL.format(g.sharedLimit));
+          o.value = g.id;
+          groupSel.appendChild(o);
+        });
+
+      if (bankId) {
+        const add = el('option', '', '+ Yeni havuz oluştur…');
+        add.value = NEW_GROUP;
+        groupSel.appendChild(add);
+      }
+
+      const exists = preferred && [...groupSel.options].some(o => o.value === preferred);
+      groupSel.value = exists ? preferred : '';
+      paintGroupState();
+    };
+
+    groupSel.addEventListener('change', paintGroupState);
+    bankSelEl.addEventListener('change', () => paintGroups(null));
+    paintGroups(editing ? editing.limitGroupId : null);
+
     /* Düzenlemede mevcut değerler yüklenir */
     if (editing) {
       label.value = editing.cardLabel || '';
@@ -77,9 +142,15 @@ export function newCardModal(editId) {
     const bankField = field('Banka', bank.wrap, 'err-bank');
     if (bank.hint) bankField.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 mt-1.5', bank.hint));
 
+    const groupWrap = el('div', 'space-y-2');
+    groupWrap.append(groupSel, newGroupWrap);
+    const groupField = field('Limit havuzu', groupWrap, 'err-group');
+    groupField.appendChild(groupHint);
+
     body.append(
       bankField,
       field('Kart etiketi', label),
+      groupField,
       field('Kart limiti (₺)', limit, 'err-limit')
     );
     // Borç yalnızca kart eklenirken sorulur; sonrasında işlemlerden hesaplanır
@@ -101,12 +172,34 @@ export function newCardModal(editId) {
       let valid = true;
 
       const bankV = bank.resolve();
-      const limitV = parseAmount(limit.value);
       const stV = parseInt(stDay.value, 10);
       const duV = parseInt(duDay.value, 10);
 
+      /* Havuz seçimi: mevcut havuz, yeni havuz ya da havuz yok */
+      const wantsNewGroup = groupSel.value === NEW_GROUP;
+      const pickedGroup = !wantsNewGroup && groupSel.value ? Store.limitGroup(groupSel.value) : null;
+      const pooled = wantsNewGroup || !!pickedGroup;
+
+      let newGroupLimitV = NaN;
+      if (wantsNewGroup) {
+        newGroupLimitV = parseAmount(newGroupLimit.value);
+        if (!newGroupName.value.trim()) { showErr('err-group', 'Yeni havuza bir ad verin.'); valid = false; }
+        else if (isNaN(newGroupLimitV) || newGroupLimitV <= 0) { showErr('err-group', 'Havuz için geçerli, pozitif bir ortak limit girin.'); valid = false; }
+      }
+      if (pickedGroup && pickedGroup.bankId !== bankV) {
+        showErr('err-group', 'Seçilen havuz başka bir bankaya ait. Havuzu yeniden seçin.');
+        valid = false;
+      }
+
+      // Havuzdaki kart kendi limitini kullanmaz; alan boşsa havuz limiti saklanır
+      const poolLimit = wantsNewGroup ? newGroupLimitV : (pickedGroup ? pickedGroup.sharedLimit : NaN);
+      const limitRaw = limit.value.trim();
+      const limitV = pooled && limitRaw === '' ? poolLimit : parseAmount(limitRaw);
+
       if (!bankV) { showErr('err-bank', 'Bir banka seçin veya yeni banka adını yazın.'); valid = false; }
-      if (isNaN(limitV) || limitV <= 0) { showErr('err-limit', 'Geçerli, pozitif bir limit girin.'); valid = false; }
+      if (isNaN(limitV) || limitV <= 0) {
+        if (!pooled || !isNaN(poolLimit)) { showErr('err-limit', 'Geçerli, pozitif bir limit girin.'); valid = false; }
+      }
       if (isNaN(stV) || stV < 1 || stV > 31) { showErr('err-st', '1–31 arası bir gün girin.'); valid = false; }
       if (isNaN(duV) || duV < 1 || duV > 31) { showErr('err-du', '1–31 arası bir gün girin.'); valid = false; }
 
@@ -117,6 +210,24 @@ export function newCardModal(editId) {
       if (!editing) {
         debtV = debt.value.trim() === '' ? 0 : parseAmount(debt.value);
         if (isNaN(debtV) || debtV < 0) { showErr('err-debt', 'Geçerli bir tutar girin (boş bırakılırsa 0).'); valid = false; }
+      }
+      const cardDebt = editing ? editing.currentDebt : debtV;
+
+      if (pooled) {
+        /*
+         * Havuzda limit kontrolü kart bazında değil havuz bazında yapılır:
+         * bu kartın borcu, havuzdaki diğer kartların borcuyla birlikte ortak limiti aşamaz.
+         */
+        const inSameGroup = editing && pickedGroup && editing.limitGroupId === pickedGroup.id;
+        const othersDebt = pickedGroup
+          ? Calc.groupDebt(pickedGroup.id) - (inSameGroup ? editing.currentDebt : 0)
+          : 0;
+        if (!isNaN(poolLimit) && !isNaN(cardDebt) && cardDebt + othersDebt > poolLimit) {
+          showErr('err-group', 'Bu kartla birlikte havuzun borcu ' + fmtTL.format(cardDebt + othersDebt) +
+            ' olur; ortak limit ' + fmtTL.format(poolLimit) + '. Havuz limitini yükseltin.');
+          valid = false;
+        }
+      } else if (!editing) {
         if (!isNaN(limitV) && !isNaN(debtV) && debtV > limitV) { showErr('err-debt', 'Mevcut borç limiti aşamaz.'); valid = false; }
       } else if (!isNaN(limitV) && limitV < editing.currentDebt) {
         // Limit düşürülürken mevcut borcun altına inilemez
@@ -125,11 +236,20 @@ export function newCardModal(editId) {
       }
       if (!valid) return;
 
+      /* Havuz kaydı karttan önce oluşturulur; kart doğrudan havuza bağlanabilsin diye */
+      let groupId = pickedGroup ? pickedGroup.id : null;
+      if (wantsNewGroup) {
+        const created = Store.addLimitGroup({ bankId: bankV, name: newGroupName.value.trim(), sharedLimit: newGroupLimitV });
+        if (!created) { showErr('err-group', 'Havuz oluşturulamadı.'); return; }
+        groupId = created.id;
+      }
+
       const saved = editing
         ? Store.updateCard(editing.id, {
             bankId: bankV,
             cardLabel: label.value.trim(),
             limit: limitV,
+            limitGroupId: groupId,
             statementDay: stV,
             dueDay: duV,
             minPaymentRate: selectedRate,
@@ -139,6 +259,7 @@ export function newCardModal(editId) {
             bankId: bankV,
             cardLabel: label.value.trim(),
             limit: limitV,
+            limitGroupId: groupId,
             currentDebt: debtV,
             statementDay: stV,
             dueDay: duV,
@@ -150,6 +271,8 @@ export function newCardModal(editId) {
       closeModal();
       renderAll();
       toast(editing ? 'Kart bilgileri güncellendi.' : Store.bankName(bankV) + ' kartı eklendi.');
+      // Kartın borcu havuz kullanımına anında yansır; limit aşıldıysa hemen bildirilir
+      warnExceededGroups();
     });
   });
 }

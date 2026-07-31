@@ -142,13 +142,76 @@ function buildBankGroup(g) {
     section.appendChild(head);
   }
 
-  const grid = el('div', 'p-4 sm:p-5 grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5');
-  g.cards.forEach(c => grid.appendChild(buildCard(c)));
-  g.overdrafts.forEach(o => grid.appendChild(buildOverdraft(o)));
-  g.loans.forEach(l => grid.appendChild(buildLoan(l)));
-  section.appendChild(grid);
+  /*
+   * Ortak limit havuzları önce, tek bir doluluk çubuğuyla çizilir; havuza ait
+   * kartlar o bloğun içinde durur. Limit ortaktır, ekstre değil — her kartın
+   * kesim ve son ödeme tarihi kendi satırında görünmeye devam eder.
+   */
+  const wrap = el('div', 'p-4 sm:p-5 space-y-4 sm:space-y-5');
+  g.limitGroups.forEach(u => wrap.appendChild(buildLimitGroupBlock(u)));
+
+  const pooled = new Set(g.limitGroups.flatMap(u => u.cards.map(x => x.card.id)));
+  const loose = g.cards.filter(c => !pooled.has(c.id));
+
+  if (loose.length || g.overdrafts.length || g.loans.length) {
+    const grid = productGrid();
+    loose.forEach(c => grid.appendChild(buildCard(c)));
+    g.overdrafts.forEach(o => grid.appendChild(buildOverdraft(o)));
+    g.loans.forEach(l => grid.appendChild(buildLoan(l)));
+    wrap.appendChild(grid);
+  }
+  section.appendChild(wrap);
 
   return section;
+}
+
+function productGrid() {
+  return el('div', 'grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5');
+}
+
+/** Ortak limit havuzu bloğu: tek doluluk çubuğu + havuzdaki kartlar. */
+function buildLimitGroupBlock(u) {
+  const block = el('div', 'rounded-xl2 border border-dashed border-accent/40 bg-accent/[.04] dark:bg-accent/[.07] p-3 sm:p-4 space-y-3');
+
+  const head = el('div', 'flex items-center gap-2 flex-wrap');
+  const badge = el('div', 'flex items-center gap-1.5 text-accent text-xs font-semibold');
+  badge.append(el('i', 'fa-solid fa-link'), el('span', '', 'Ortak limit'));
+  head.append(
+    badge,
+    el('p', 'font-bold text-sm truncate min-w-0 flex-1', u.group.name),
+    el('p', 'text-xs text-gray-500 dark:text-gray-400 num shrink-0',
+      fmtTL0.format(u.debt) + ' / ' + fmtTL0.format(u.limit))
+  );
+
+  const track = el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+  const fill = el('div', 'progress-fill h-full rounded-full');
+  fill.style.width = Math.min(u.ratio * 100, 100) + '%';
+  fill.style.backgroundColor = Calc.usageColor(u.ratio);
+  track.appendChild(fill);
+
+  const foot = el('div', 'flex justify-between text-xs');
+  foot.append(
+    el('span', 'text-gray-500 dark:text-gray-400',
+      u.cards.length + ' kart · %' + Math.round(u.ratio * 100) + ' kullanım'),
+    el('span', 'font-semibold num', 'Kullanılabilir ' + fmtTL0.format(u.available))
+  );
+
+  block.append(head, track, foot);
+
+  if (u.over) {
+    const warn = el('div', 'flex items-center gap-2 rounded-lg bg-danger/10 text-danger px-2.5 py-2 text-xs font-semibold');
+    warn.append(
+      el('i', 'fa-solid fa-triangle-exclamation'),
+      el('span', '', 'Havuz limiti ' + fmtTL0.format(u.debt - u.limit) + ' aşıldı')
+    );
+    block.appendChild(warn);
+  }
+
+  const grid = productGrid();
+  u.cards.forEach(x => grid.appendChild(buildCard(x.card, u)));
+  block.appendChild(grid);
+
+  return block;
 }
 
 /** Ürün kutularının ortak kabuğu: tıklanabilir, üstte renkli banka görseli. */
@@ -274,7 +337,8 @@ function buildLoan(loan) {
   return wrap;
 }
 
-function buildCard(card) {
+/** pool verilirse kart bir ortak limit havuzundadır: kendi limit çubuğu çizilmez. */
+function buildCard(card, pool) {
   const ratio = Calc.usage(card);
   const color = Calc.usageColor(ratio);
   const statement = Calc.nextOccurrence(card.statementDay);
@@ -291,23 +355,34 @@ function buildCard(card) {
     card.currentDebt
   );
 
-  const barWrap = el('div');
-  const barTop = el('div', 'flex justify-between text-xs mb-1.5');
-  barTop.append(
-    el('span', 'text-gray-500 dark:text-gray-400', 'Limit kullanımı'),
-    el('span', 'font-semibold num', '%' + Math.round(ratio * 100))
-  );
-  const track = el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
-  const fill = el('div', 'progress-fill h-full rounded-full');
-  fill.style.width = Math.min(ratio * 100, 100) + '%';
-  fill.style.backgroundColor = color;
-  track.appendChild(fill);
-  barWrap.append(barTop, track);
+  /*
+   * Havuzdaki kartın kendi limit çubuğu yanıltıcı olur: limit ortaktır,
+   * doluluk havuz bloğunun tepesinde tek çubukla gösterilir. Kart kutusunda
+   * yalnızca kartın havuza katkısı yazar.
+   */
+  let barWrap = null;
+  if (!pool) {
+    barWrap = el('div');
+    const barTop = el('div', 'flex justify-between text-xs mb-1.5');
+    barTop.append(
+      el('span', 'text-gray-500 dark:text-gray-400', 'Limit kullanımı'),
+      el('span', 'font-semibold num', '%' + Math.round(ratio * 100))
+    );
+    const track = el('div', 'h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+    const fill = el('div', 'progress-fill h-full rounded-full');
+    fill.style.width = Math.min(ratio * 100, 100) + '%';
+    fill.style.backgroundColor = color;
+    track.appendChild(fill);
+    barWrap.append(barTop, track);
+  }
 
   const stats = el('div', 'grid grid-cols-2 gap-2 text-xs');
+  const share = pool && pool.limit > 0 ? card.currentDebt / pool.limit : 0;
   stats.append(
-    statBox('Limit', fmtTL0.format(card.limit)),
-    statBox('Kullanılabilir', fmtTL0.format(Math.max(card.limit - card.currentDebt, 0))),
+    pool
+      ? statBox('Havuz payı', '%' + Math.round(share * 100))
+      : statBox('Limit', fmtTL0.format(card.limit)),
+    statBox('Kullanılabilir', fmtTL0.format(Calc.availableLimit(card.id))),
     statBox('Hesap kesim', fmtDateShort.format(statement)),
     statBox('Son ödeme', fmtDateShort.format(due), late || soon ? 'text-danger' : '')
   );
@@ -350,7 +425,12 @@ function buildCard(card) {
     );
   }
 
-  body.append(barWrap, stats, minRow);
+  if (barWrap) body.append(barWrap, stats, minRow);
+  else {
+    body.append(stats, minRow);
+    body.appendChild(el('p', 'text-[11px] text-gray-400 dark:text-gray-500',
+      '"' + pool.group.name + '" havuzunun ortak limitini kullanıyor.'));
+  }
 
   /* Bu dönem harcaması ve varsa aylık taksit yükü */
   const period = Calc.periodActivity(card);

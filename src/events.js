@@ -11,6 +11,7 @@ import { newTransactionModal } from './ui/modals/new-transaction.js';
 import { overdraftModal } from './ui/modals/new-overdraft.js';
 import { loanModal } from './ui/modals/new-loan.js';
 import { banksModal } from './ui/modals/banks.js';
+import { limitGroupsModal } from './ui/modals/limit-groups.js';
 import { moveMonth } from './ui/views/calendar.js';
 import { bindTransactionFilters, getFilteredTransactions } from './ui/views/transactions.js';
 import { recurringModal } from './ui/modals/recurring.js';
@@ -142,6 +143,7 @@ function bindCalendar() {
 
 function bindSettings() {
   byId('manageBanksBtn').addEventListener('click', () => banksModal());
+  byId('limitGroupsBtn').addEventListener('click', () => limitGroupsModal());
   byId('addRecurringBtn').addEventListener('click', () => recurringModal());
   byId('exportBtn').addEventListener('click', () => Backup.exportJSON());
   byId('exportCsvBtn').addEventListener('click', () => Backup.exportCSV());

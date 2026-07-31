@@ -16,7 +16,9 @@ export const Store = {
 
   defaults() {
     return {
+      schemaVersion: CONFIG.schemaVersion,
       banks: [],
+      limitGroups: [],
       cards: [],
       overdrafts: [],
       loans: [],
@@ -30,6 +32,28 @@ export const Store = {
         lastExport: null
       }
     };
+  },
+
+  /**
+   * Şema göçleri: anahtar, veriyi o sürüme taşıyan adımdır (2 = v1'den v2'ye).
+   * normalize() içinde sıralı zincir olarak çalışır; başka hiçbir yerde çağrılmaz.
+   */
+  migrations: {
+    /* v1 → v2: ortak limit havuzu. Havuz listesi boş başlar, kartların bağı yoktur. */
+    2(out) {
+      if (!Array.isArray(out.limitGroups)) out.limitGroups = [];
+      out.cards.forEach(c => { if (c.limitGroupId === undefined) c.limitGroupId = null; });
+    }
+  },
+
+  /** Veriyi sürüm sürüm güncel şemaya taşır. */
+  runMigrations(out) {
+    const from = Math.max(1, parseInt(out.schemaVersion, 10) || 1);
+    for (let v = from + 1; v <= CONFIG.schemaVersion; v += 1) {
+      const step = this.migrations[v];
+      if (step) step.call(this, out);
+    }
+    out.schemaVersion = CONFIG.schemaVersion;
   },
 
   /**
@@ -178,6 +202,31 @@ export const Store = {
       c.openingDebt = Math.round((c.currentDebt - delta) * 100) / 100;
     });
 
+    // Şema göçleri: eksik alanlar burada, tek noktada eklenir
+    this.runMigrations(out);
+
+    /*
+     * Ortak limit havuzları. Havuz tek bir bankaya bağlıdır; bankası silinmiş
+     * havuz düşer. Kartın havuz bağı yalnızca havuz duruyorsa ve kart aynı
+     * bankadaysa korunur — banka değişmiş/silinmiş kartın bağı kopar.
+     */
+    const allBankIds = new Set(out.banks.map(b => b.id));
+    out.limitGroups = (Array.isArray(out.limitGroups) ? out.limitGroups : [])
+      .filter(g => g && typeof g === 'object' && allBankIds.has(g.bankId))
+      .map(g => ({
+        id: g.id || this.uid(),
+        bankId: g.bankId,
+        name: String(g.name || '').trim() || 'Ortak limit',
+        sharedLimit: Math.max(0, num(g.sharedLimit)),
+        createdAt: safeDate(g.createdAt) ? g.createdAt : new Date().toISOString()
+      }));
+
+    const groupById = new Map(out.limitGroups.map(g => [g.id, g]));
+    out.cards.forEach(c => {
+      const g = c.limitGroupId ? groupById.get(c.limitGroupId) : null;
+      c.limitGroupId = g && g.bankId === c.bankId ? g.id : null;
+    });
+
     return out;
   },
 
@@ -278,7 +327,18 @@ export const Store = {
       }
     });
 
+    // Ürünü olmayan bir banka çıkarıldıysa o bankanın havuzu da sahipsiz kalır
+    this.pruneLimitGroups();
+
     return { kept, saved: this.save() };
+  },
+
+  /** Bankası artık bulunmayan havuzları ve kartların sahipsiz havuz bağlarını temizler. */
+  pruneLimitGroups() {
+    const bankIds = new Set(this.data.banks.map(b => b.id));
+    this.data.limitGroups = this.data.limitGroups.filter(g => bankIds.has(g.bankId));
+    const groupIds = new Set(this.data.limitGroups.map(g => g.id));
+    this.data.cards.forEach(c => { if (c.limitGroupId && !groupIds.has(c.limitGroupId)) c.limitGroupId = null; });
   },
 
   bankProductCount(bankId) {
@@ -295,6 +355,62 @@ export const Store = {
     // bankName yalnızca gösterim kopyasıdır; banka adı değişince birlikte taşınır
     [this.data.cards, this.data.overdrafts, this.data.loans].forEach(list =>
       list.forEach(p => { if (p.bankId === id) p.bankName = clean; }));
+    return this.save();
+  },
+
+  /* ---------- ortak limit havuzları ---------- */
+
+  limitGroup(id) {
+    return this.data.limitGroups.find(g => g.id === id) || null;
+  },
+
+  /** Havuzdaki kartlar. Havuz tek bankaya bağlı olduğu için hepsi aynı bankadandır. */
+  limitGroupCards(groupId) {
+    return this.data.cards.filter(c => c.limitGroupId === groupId);
+  },
+
+  addLimitGroup({ bankId, name, sharedLimit }) {
+    if (!this.bank(bankId)) return null;
+    const group = {
+      id: this.uid(),
+      bankId,
+      name: String(name || '').trim() || 'Ortak limit',
+      sharedLimit: Math.max(0, num(sharedLimit)),
+      createdAt: new Date().toISOString()
+    };
+    this.data.limitGroups.push(group);
+    return this.save() ? group : null;
+  },
+
+  updateLimitGroup(id, patch) {
+    const g = this.limitGroup(id);
+    if (!g) return false;
+    Object.assign(g, patch);
+    g.name = String(g.name || '').trim() || 'Ortak limit';
+    g.sharedLimit = Math.max(0, num(g.sharedLimit));
+    // Havuzun bankası değiştiyse başka bankanın kartları havuzda kalamaz
+    this.data.cards.forEach(c => {
+      if (c.limitGroupId === id && c.bankId !== g.bankId) c.limitGroupId = null;
+    });
+    return this.save();
+  },
+
+  /** Havuzu siler; havuzdaki kartlar kendi limitlerine döner (limit alanı hiç silinmemiştir). */
+  deleteLimitGroup(id) {
+    this.data.limitGroups = this.data.limitGroups.filter(g => g.id !== id);
+    this.data.cards.forEach(c => { if (c.limitGroupId === id) c.limitGroupId = null; });
+    return this.save();
+  },
+
+  /** Kartı havuza alır (groupId null ise havuzdan çıkarır). */
+  setCardLimitGroup(cardId, groupId) {
+    const card = this.data.cards.find(c => c.id === cardId);
+    if (!card) return false;
+    if (!groupId) { card.limitGroupId = null; return this.save(); }
+
+    const g = this.limitGroup(groupId);
+    if (!g || g.bankId !== card.bankId) return false;
+    card.limitGroupId = g.id;
     return this.save();
   },
 
@@ -358,6 +474,13 @@ export const Store = {
     return this.save();
   },
 
+  /** Kartın havuz bağı yalnızca havuz duruyorsa ve aynı bankadaysa geçerlidir. */
+  validateCardGroup(card) {
+    if (!card.limitGroupId) { card.limitGroupId = null; return; }
+    const g = this.limitGroup(card.limitGroupId);
+    if (!g || g.bankId !== card.bankId) card.limitGroupId = null;
+  },
+
   addCard(card) {
     card.id = this.uid();
     card.createdAt = new Date().toISOString();
@@ -365,6 +488,7 @@ export const Store = {
     card.color = CONFIG.cardGradients[this.data.cards.length % CONFIG.cardGradients.length];
     // Kart eklenirken girilen mevcut borç, sonraki hesaplamaların başlangıç noktasıdır
     card.openingDebt = num(card.currentDebt);
+    this.validateCardGroup(card);
     this.data.cards.push(card);
     return this.save();
   },
@@ -374,6 +498,8 @@ export const Store = {
     if (!c) return false;
     Object.assign(c, patch);
     if (patch.bankId) c.bankName = this.bankName(patch.bankId);
+    // Banka değişmişse havuz bağı kopar; havuz tek bankaya aittir
+    this.validateCardGroup(c);
     return this.save();
   },
 
@@ -505,6 +631,7 @@ export const Store = {
   snapshot() {
     return JSON.parse(JSON.stringify({
       banks: this.data.banks,
+      limitGroups: this.data.limitGroups,
       cards: this.data.cards,
       overdrafts: this.data.overdrafts,
       loans: this.data.loans,
@@ -519,6 +646,7 @@ export const Store = {
     this.data.cards = snap.cards;
     this.data.transactions = snap.transactions;
     if (snap.banks) this.data.banks = snap.banks;
+    if (snap.limitGroups) this.data.limitGroups = snap.limitGroups;
     if (snap.overdrafts) this.data.overdrafts = snap.overdrafts;
     if (snap.loans) this.data.loans = snap.loans;
     if (snap.recurring) this.data.recurring = snap.recurring;

@@ -4,6 +4,14 @@
  */
 export const CONFIG = {
   storageKey: 'kartpanel_data',
+  /*
+   * Veri şeması sürümü. Şema değiştiğinde artırılır ve Store.migrations'a
+   * o sürüme ait adım eklenir; göçler sıralı zincir olarak yalnızca
+   * Store.normalize() içinde çalışır.
+   *   1 → ilk şema
+   *   2 → ortak limit havuzu (limitGroups, card.limitGroupId)
+   */
+  schemaVersion: 2,
   usageThresholds: { warn: 0.5, danger: 0.8 },
   statusColors: { ok: '#30D158', warn: '#FFD60A', danger: '#FF453A' },
   accent: '#0A84FF',

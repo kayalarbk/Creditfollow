@@ -10,7 +10,7 @@
 >   commit'lenir ve push'lanır. Commit mesajı formatı: `feat/fix/docs: kısa açıklama`
 > - Push yapılmadan görev tamamlanmış sayılmaz / raporlanmaz.
 
-Son güncelleme: 2026-07-22
+Son güncelleme: 2026-08-01
 
 ---
 
@@ -50,6 +50,7 @@ tarayıcıda çalışan panel.
 | 2026-07-22 | `91ba92e` | **feat:** avans hesap (kredili mevduat) ve ihtiyaç kredisi ürünleri; ürünler banka varlığı altında gruplandı |
 | 2026-07-22 | (bu commit) | **docs:** PROGRESS.md proje hafızası dosyası eklendi |
 | 2026-07-22 | (bu commit) | **fix:** geçmişe dönük borçla eklenen kartta, kart eklenmeden önce son ödeme günü geçmiş ekstre için gecikme uyarısı çıkmıyor; sonraki dönem bekleniyor |
+| 2026-08-01 | (bu commit) | **feat:** ortak limit havuzu — aynı bankanın birden fazla kartı tek limiti paylaşabiliyor (`limitGroups`, `schemaVersion: 2`, göç zinciri, havuz yönetim modalı, panelde havuz bloğu) |
 
 ### Mevcut özellik seti
 - **Panel (dashboard):** toplam borç/limit donutu, borç seyri grafiği, yaklaşan ödemeler,
@@ -61,6 +62,9 @@ tarayıcıda çalışan panel.
   düzenleme, silme + geri alma, tekrarlayan işlemler
 - **Takvim:** ay görünümünde hesap kesim ve son ödeme günleri
 - **Bildirimler:** son ödeme tarihine N gün kala uyarı + gecikme tespiti (eşik ayarlanabilir)
+- **Ortak limit havuzu:** aynı bankanın kartları tek limiti paylaşabilir; toplam limit
+  havuzu bir kez sayar, kullanılabilir limit havuzun tamamından hesaplanır, kartların
+  kesim/son ödeme tarihleri ayrı kalır
 - **Faiz projeksiyonu:** kart/avans bazında akdi faiz oranı ile borç projeksiyonu
 - **Dışa/içe aktarma:** JSON yedek + filtreli CSV (Excel uyumlu)
 - **Otomatik yedek:** File System Access API ile seçilen dosyaya sürekli yazma, veri
@@ -106,6 +110,7 @@ Creditfollow/
     │   │   └── settings.js          # Ayarlar: tema, eşik, bütçe, yedekleme
     │   └── modals/
     │       ├── banks.js             # Banka yönetimi
+│       ├── limit-groups.js      # Ortak limit havuzu yönetimi + limit aşımı uyarısı
     │       ├── new-card.js / card-detail.js
     │       ├── new-overdraft.js / overdraft-detail.js
     │       ├── new-loan.js / loan-detail.js
@@ -149,6 +154,25 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
 9. **Otomatik yedek File System Access API ile.** İzin kalıcı değilse kullanıcıya
    "Yedek dosyasına bağlan" uyarısı gösterilir; tarayıcı verisi boşsa dosyadan geri yüklenir.
 10. **Tüm metinler Türkçe**, para/tarih biçimlemesi `Intl` ile `tr-TR`.
+11. **Şema sürümü ve göç zinciri (2026-08-01).** `CONFIG.schemaVersion` veri şemasının
+    sürümüdür; `Store.migrations` sürüm sürüm adımlar içerir ve yalnızca
+    `Store.runMigrations()` üzerinden, `normalize()` içinde çalışır. Gerekçe: eksik alan
+    tamamlama render sırasında dağılmasın, eski yedekler tek noktadan güncel şemaya taşınsın.
+12. **Ortak limit havuzu (2026-08-01).** Aynı bankanın kartları tek limiti paylaşabildiği
+    için kart başına `limit` toplamı yanıltıcıydı. Yeni varlık `limitGroups`
+    (`{ id, bankId, name, sharedLimit, createdAt }`) ve kartta `limitGroupId`.
+    Kararlar:
+    - Havuz **tek bankaya** bağlıdır; kartın bankası değişirse/silinirse bağ kopar
+      (`Store.validateCardGroup`, `normalize()` ve `pruneLimitGroups()`).
+    - Kartın kendi `limit` değeri havuzdayken de **saklanır**; havuzdan çıkınca
+      kart eski limitine döner (veri kaybı olmasın diye alan hiç sıfırlanmaz).
+    - `Calc.totalLimit()` havuz limitini bir kez sayar; panel donutu ve kullanım oranı
+      kart limitlerini toplamaz. `Calc.availableLimit(cardId)` havuzdaki kart için
+      havuzun tamamından havuzdaki tüm kartların borcunu düşer.
+    - Limit ortaktır, **ekstre değil**: her kartın kesim ve son ödeme tarihi kendi
+      satırında ayrı görünmeye devam eder.
+    - Boş kalan havuz silinmez, uyarı gösterilir (kullanıcı kartı geri alabilir).
+    - Harcama/mutabakat limit kontrolleri havuzdaki kart için ortak limite bakar.
 
 ---
 
@@ -157,7 +181,12 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
 - [ ] `README.md` çalışma alanında silinmiş durumda (`git status` → `D README.md`).
       Karar verilmeli: geri yüklensin mi, yoksa silme commit'lensin mi?
 - [ ] Test altyapısı yok — en azından `calc.js` için birim testleri (ekstre dönemi,
-      asgari ödeme, taksit dağılımı, faiz projeksiyonu) eklenmeli.
+      asgari ödeme, taksit dağılımı, faiz projeksiyonu) eklenmeli. Not: `core/` modülleri
+      `store.js` → `ui/toast.js` üzerinden DOM'a bağlı olduğu için Node altında doğrudan
+      import edilemiyor; saf hesap katmanı (`interest.js`) DOM'suz yazılacak ve testler
+      oradan başlayacak.
+- [ ] Ortak limit havuzu yalnızca kredi kartlarını kapsıyor; avans hesabın da aynı
+      havuza girdiği bankalar var mı, kullanıcı geri bildirimiyle değerlendirilecek.
 - [x] ~~`refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.~~
       2026-07-22'de `main` ileri sarıldı (fast-forward) ve push'landı; iki dal da `2e787ef`.
       Not: çalışma dalı hâlâ `refactor/proje-yapisi`; yeni işler burada yapılıp

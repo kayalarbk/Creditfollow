@@ -215,6 +215,95 @@ export const Calc = {
     return card.limit > 0 ? card.currentDebt / card.limit : 0;
   },
 
+  /* ---------- ortak limit havuzu ---------- */
+
+  /**
+   * Kartın bağlı olduğu limit havuzu (yoksa null).
+   * Aynı bankanın birden fazla kartı tek bir limiti paylaşabildiği için
+   * kartın kendi limit alanı her zaman kullanılabilir limiti göstermez.
+   */
+  cardGroup(card) {
+    return card && card.limitGroupId ? Store.limitGroup(card.limitGroupId) : null;
+  },
+
+  /** Havuzdaki kartların güncel borç toplamı. */
+  groupDebt(groupId) {
+    const debt = Store.limitGroupCards(groupId).reduce((s, c) => s + c.currentDebt, 0);
+    return Math.round(debt * 100) / 100;
+  },
+
+  /**
+   * Havuz doluluğu ve kart bazında katkı dağılımı.
+   * Dönüş: null (havuz yok) | { group, cards:[{card, debt, share}], limit, debt, available, ratio, over }
+   */
+  groupUtilization(groupId) {
+    const group = Store.limitGroup(groupId);
+    if (!group) return null;
+
+    const cards = Store.limitGroupCards(groupId);
+    const debt = this.groupDebt(groupId);
+    const limit = group.sharedLimit;
+
+    return {
+      group,
+      cards: cards
+        .map(card => ({
+          card,
+          debt: card.currentDebt,
+          // Kartın havuzun yüzde kaçını kullandığı; havuz boşsa pay da yoktur
+          share: limit > 0 ? card.currentDebt / limit : 0
+        }))
+        .sort((a, b) => b.debt - a.debt),
+      limit,
+      debt,
+      available: Math.max(limit - debt, 0),
+      ratio: limit > 0 ? debt / limit : 0,
+      over: debt > limit
+    };
+  },
+
+  /** Borcu ortak limitini aşmış havuzlar. */
+  exceededLimitGroups() {
+    return Store.data.limitGroups
+      .map(g => this.groupUtilization(g.id))
+      .filter(u => u && u.over);
+  },
+
+  /**
+   * Kartın kullanılabilir limiti.
+   * Havuzdaki kart için havuzun tamamından havuzdaki tüm kartların borcu düşülür;
+   * havuzsuz kart için kendi limitinden kendi borcu düşülür.
+   */
+  availableLimit(cardId) {
+    const card = Store.data.cards.find(c => c.id === cardId);
+    if (!card) return 0;
+
+    const group = this.cardGroup(card);
+    if (group) return Math.max(Math.round((group.sharedLimit - this.groupDebt(group.id)) * 100) / 100, 0);
+    return Math.max(Math.round((card.limit - card.currentDebt) * 100) / 100, 0);
+  },
+
+  /**
+   * Rotatif ürünlerin toplam limiti.
+   * Havuz limiti kaç kart paylaşırsa paylaşsın bir kez sayılır; kartların kendi
+   * limitleri havuzdayken toplama girmez (girseydi toplam limit şişerdi).
+   */
+  totalLimit(cards = Store.data.cards, overdrafts = Store.data.overdrafts) {
+    const usedGroups = new Set();
+    let cardLimit = 0;
+
+    cards.forEach(c => {
+      const group = this.cardGroup(c);
+      if (group) { usedGroups.add(group.id); return; }
+      cardLimit += c.limit;
+    });
+    // Kartı olmayan havuz kullanılabilir limit üretmez, toplama katılmaz
+    usedGroups.forEach(id => { cardLimit += Store.limitGroup(id).sharedLimit; });
+
+    const odLimit = overdrafts.reduce((s, o) => s + o.limit, 0);
+    return { cardLimit, odLimit, limit: cardLimit + odLimit };
+  },
+
   usageColor(ratio) {
     if (ratio >= CONFIG.usageThresholds.danger) return CONFIG.statusColors.danger;
     if (ratio >= CONFIG.usageThresholds.warn) return CONFIG.statusColors.warn;
@@ -347,11 +436,18 @@ export const Calc = {
         const cardDebt = cards.reduce((s, c) => s + c.currentDebt, 0);
         const odDebt = overdrafts.reduce((s, o) => s + o.currentDebt, 0);
         const loanDebt = loans.reduce((s, l) => s + this.loanSummary(l).remainingDebt, 0);
-        const limit = cards.reduce((s, c) => s + c.limit, 0) + overdrafts.reduce((s, o) => s + o.limit, 0);
+        // Havuz limiti bir kez sayılır; banka toplamı da kart limitlerinin toplamı değildir
+        const limit = this.totalLimit(cards, overdrafts).limit;
         const revolvingDebt = cardDebt + odDebt;
 
+        // Bu bankanın kart barındıran limit havuzları — panel havuzu tek blok olarak çizer
+        const limitGroups = Store.data.limitGroups
+          .filter(g => g.bankId === bank.id)
+          .map(g => this.groupUtilization(g.id))
+          .filter(u => u && u.cards.length > 0);
+
         return {
-          bank, cards, overdrafts, loans,
+          bank, cards, overdrafts, loans, limitGroups,
           count: cards.length + overdrafts.length + loans.length,
           cardDebt, odDebt,
           loanDebt: Math.round(loanDebt * 100) / 100,
@@ -386,13 +482,12 @@ export const Calc = {
     const cards = Store.data.cards;
     const overdrafts = Store.data.overdrafts;
 
-    const cardLimit = cards.reduce((s, c) => s + c.limit, 0);
     const cardDebt = cards.reduce((s, c) => s + c.currentDebt, 0);
-    const odLimit = overdrafts.reduce((s, o) => s + o.limit, 0);
     const odDebt = overdrafts.reduce((s, o) => s + o.currentDebt, 0);
 
-    // Limit kullanımı yalnızca rotatif ürünler içindir; kredinin limiti yoktur
-    const limit = cardLimit + odLimit;
+    // Limit kullanımı yalnızca rotatif ürünler içindir; kredinin limiti yoktur.
+    // Ortak limit havuzları tek sayıldığı için toplam limit totalLimit()'ten gelir.
+    const { cardLimit, odLimit, limit } = this.totalLimit(cards, overdrafts);
     const debt = cardDebt + odDebt;
     const loans = this.loanTotals();
 

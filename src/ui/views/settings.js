@@ -1,4 +1,5 @@
 import { Store } from '../../core/store.js';
+import { Calc } from '../../core/calc.js';
 import { AutoBackup } from '../../core/autobackup.js';
 import { el, byId, clear } from '../../utils/dom.js';
 import { fmtTL, fmtDate, category, bankIcon } from '../../utils/format.js';
@@ -14,7 +15,53 @@ export function renderSettings() {
     : 'Henüz yedek alınmadı.';
   renderAutoBackup();
   renderBanks();
+  renderLimitGroups();
   renderRecurring();
+}
+
+/** Tanımlı ortak limit havuzları ve doluluk durumları. */
+function renderLimitGroups() {
+  const box = clear(byId('limitGroupsList'));
+  const groups = Store.data.limitGroups;
+
+  if (groups.length === 0) {
+    box.appendChild(el('p', 'text-sm text-gray-400 dark:text-gray-500 py-2',
+      'Havuz tanımlanmadı. Her kart kendi limitini kullanıyor.'));
+    return;
+  }
+
+  groups
+    .map(g => Calc.groupUtilization(g.id))
+    .filter(Boolean)
+    .forEach(u => {
+      const row = el('div', 'p-3 rounded-xl bg-black/[.03] dark:bg-white/5 space-y-2');
+
+      const head = el('div', 'flex items-center gap-3');
+      const ic = el('div', 'w-9 h-9 rounded-xl bg-accent/10 text-accent grid place-items-center shrink-0');
+      ic.appendChild(el('i', 'fa-solid ' + bankIcon(Store.bankName(u.group.bankId)) + ' text-sm'));
+
+      const mid = el('div', 'flex-1 min-w-0');
+      mid.append(
+        el('p', 'text-sm font-medium truncate', u.group.name),
+        el('p', 'text-xs text-gray-500 dark:text-gray-400 truncate',
+          Store.bankName(u.group.bankId) + ' · ' +
+          (u.cards.length ? u.cards.length + ' kart' : 'kart yok') + ' · ortak limit ' + fmtTL.format(u.limit))
+      );
+      head.append(ic, mid, el('p', 'text-sm font-bold num shrink-0', '%' + Math.round(u.ratio * 100)));
+
+      const track = el('div', 'h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden');
+      const fill = el('div', 'progress-fill h-full rounded-full');
+      fill.style.width = Math.min(u.ratio * 100, 100) + '%';
+      fill.style.backgroundColor = Calc.usageColor(u.ratio);
+      track.appendChild(fill);
+
+      row.append(head, track);
+      if (u.cards.length === 0) {
+        row.appendChild(el('p', 'text-xs text-warn font-semibold',
+          'Bu havuzda kart yok; toplam limite katkı vermiyor.'));
+      }
+      box.appendChild(row);
+    });
 }
 
 /** Seçili bankalar ve her birindeki ürün dökümü. */

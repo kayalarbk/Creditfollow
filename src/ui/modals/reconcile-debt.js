@@ -1,9 +1,11 @@
 import { Store } from '../../core/store.js';
+import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, parseAmount } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, primaryButton, showErr, clearErrs } from '../modal.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
+import { warnExceededGroups } from './limit-groups.js';
 
 /**
  * Borç mutabakatı: uygulamadaki borç ekstredeki tutarla uyuşmadığında
@@ -58,7 +60,19 @@ export function reconcileDebtModal(cardId) {
       clearErrs(box);
       const v = parseAmount(real.value);
       if (isNaN(v) || v < 0) { showErr('err-real', 'Geçerli bir tutar girin.'); return; }
-      if (v > card.limit) { showErr('err-real', 'Borç kart limitini (' + fmtTL.format(card.limit) + ') aşamaz.'); return; }
+      // Havuzdaki kartta sınır ortak limittir; diğer kartların borcu da hesaba katılır
+      const pool = Calc.cardGroup(card);
+      if (pool) {
+        const others = Calc.groupDebt(pool.id) - card.currentDebt;
+        if (v + others > pool.sharedLimit) {
+          showErr('err-real', 'Borç, "' + pool.name + '" havuzunun ortak limitini (' +
+            fmtTL.format(pool.sharedLimit) + ') aşamaz. Havuzdaki diğer kartların borcu: ' + fmtTL.format(others) + '.');
+          return;
+        }
+      } else if (v > card.limit) {
+        showErr('err-real', 'Borç kart limitini (' + fmtTL.format(card.limit) + ') aşamaz.');
+        return;
+      }
 
       const diff = Math.round((v - card.currentDebt) * 100) / 100;
       if (Math.abs(diff) < 0.01) {
@@ -82,6 +96,7 @@ export function reconcileDebtModal(cardId) {
       closeModal();
       renderAll();
       toast('Borç ' + fmtTL.format(v) + ' olarak eşitlendi.');
+      warnExceededGroups();
     });
   });
 }

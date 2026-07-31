@@ -7,6 +7,7 @@ import { openModal, closeModal, modalHeader, field, input, select, primaryButton
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 import { newCardModal } from './new-card.js';
+import { warnExceededGroups } from './limit-groups.js';
 
 /** <input type="date"> yerel gün değeri (ISO'nun UTC kayması olmadan). */
 function dateInputValue(value) {
@@ -205,8 +206,16 @@ export function newTransactionModal(presetCardId, editId) {
       if (txType === 'expense' && card) {
         // Düzenlemede işlemin kendi eski etkisi limit kontrolünden düşülmeli
         const own = editing && editing.cardId === card.id && editing.type === 'expense' ? editing.amount : 0;
-        if (card.currentDebt - own + amtV > card.limit) {
-          showErr('err-amt', 'Bu harcama kart limitini aşıyor (kalan: ' + fmtTL.format(card.limit - card.currentDebt + own) + ').');
+        /*
+         * Havuzdaki kartta sınır kartın kendi limiti değil, havuzun ortak limitidir:
+         * aynı limiti paylaşan diğer kartların borcu da hesaba katılır.
+         */
+        const pool = Calc.cardGroup(card);
+        const limit = pool ? pool.sharedLimit : card.limit;
+        const used = pool ? Calc.groupDebt(pool.id) : card.currentDebt;
+        if (used - own + amtV > limit) {
+          showErr('err-amt', 'Bu harcama ' + (pool ? '"' + pool.name + '" havuzunun ortak limitini' : 'kart limitini') +
+            ' aşıyor (kalan: ' + fmtTL.format(Math.max(limit - used + own, 0)) + ').');
           return;
         }
       }
@@ -254,6 +263,8 @@ export function newTransactionModal(presetCardId, editId) {
       } else {
         toast(txType === 'expense' ? 'Harcama kaydedildi.' : 'Ödeme kaydedildi, borç güncellendi.');
       }
+      // Mutabakat/düzeltme gibi yollarla havuz limiti aşılmış olabilir
+      warnExceededGroups();
     });
   });
 }

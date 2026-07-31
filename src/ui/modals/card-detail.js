@@ -26,15 +26,32 @@ export function cardDetailModal(cardId) {
       return d;
     };
     const st = Calc.statementSummary(card);
+    // Havuzdaki kartın limiti kendi limiti değil, paylaştığı ortak limittir
+    const pool = Calc.cardGroup(card);
     summary.append(
       stat('Güncel borç', fmtTL.format(card.currentDebt)),
-      stat('Limit', fmtTL0.format(card.limit)),
+      stat(pool ? 'Ortak limit' : 'Limit', fmtTL0.format(pool ? pool.sharedLimit : card.limit)),
       stat('Kalan asgari', st.hasStatement ? fmtTL.format(st.remainingMin) : '—'),
       stat('Son ödeme', st.hasStatement
         ? fmtDate.format(st.dueDate)
         : fmtDate.format(Calc.nextOccurrence(card.dueDay)))
     );
     body.appendChild(summary);
+
+    if (pool) {
+      const u = Calc.groupUtilization(pool.id);
+      const poolBox = el('div', 'rounded-xl border border-accent/30 bg-accent/[.06] p-3 space-y-1');
+      poolBox.append(
+        el('p', 'text-xs font-semibold text-accent', '"' + pool.name + '" ortak limit havuzu'),
+        el('p', 'text-xs text-gray-600 dark:text-gray-300',
+          u.cards.length + ' kart bu limiti paylaşıyor. Havuzda kullanılan ' + fmtTL.format(u.debt) +
+          ', kullanılabilir ' + fmtTL.format(u.available) + '. Bu kartın payı %' +
+          Math.round((u.limit > 0 ? card.currentDebt / u.limit : 0) * 100) + '.'),
+        el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+          'Limit ortaktır, ekstre değil: bu kartın kesim ve son ödeme tarihi kendine aittir.')
+      );
+      body.appendChild(poolBox);
+    }
 
     /* Kesilmiş ekstre: asgari bu tutar üzerinden sabitlenir, ödendikçe azalır */
     const stBox = el('div', 'rounded-xl p-4 space-y-2 ' + (
