@@ -5,6 +5,7 @@ import { el } from '../../utils/dom.js';
 import { fmtTL, parseAmount } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, select, primaryButton, showErr, clearErrs } from '../modal.js';
 import { bankSelect } from '../bank-select.js';
+import { rateFields } from '../rate-fields.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 import { warnExceededGroups } from './limit-groups.js';
@@ -159,7 +160,8 @@ export function newCardModal(editId) {
     interestField.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 mt-1.5',
       'Borcunuzu asgari ödeseniz ne olurdu hesabı için kullanılır. Bilmiyorsanız olduğu gibi bırakın; 0 yazarsanız hesap gösterilmez.'));
 
-    body.append(dayGrid, field('Asgari ödeme oranı', rateWrap), interestField, submit);
+    const rates = rateFields('card', editing);
+    body.append(dayGrid, field('Asgari ödeme oranı', rateWrap), interestField, rates.wrap, submit);
 
     if (editing) {
       body.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 text-center',
@@ -205,6 +207,7 @@ export function newCardModal(editId) {
 
       const intPct = interest.value.trim() === '' ? 0 : parseAmount(interest.value);
       if (isNaN(intPct) || intPct < 0 || intPct > 100) { showErr('err-int', '0–100 arası bir oran girin.'); valid = false; }
+      if (!rates.validate()) valid = false;
 
       let debtV = 0;
       if (!editing) {
@@ -244,28 +247,21 @@ export function newCardModal(editId) {
         groupId = created.id;
       }
 
+      // Gecikme faizi ve vergi oranları ortak "gelişmiş" bölümünden gelir
+      const common = Object.assign({
+        bankId: bankV,
+        cardLabel: label.value.trim(),
+        limit: limitV,
+        limitGroupId: groupId,
+        statementDay: stV,
+        dueDay: duV,
+        minPaymentRate: selectedRate,
+        interestRate: intPct / 100
+      }, rates.values());
+
       const saved = editing
-        ? Store.updateCard(editing.id, {
-            bankId: bankV,
-            cardLabel: label.value.trim(),
-            limit: limitV,
-            limitGroupId: groupId,
-            statementDay: stV,
-            dueDay: duV,
-            minPaymentRate: selectedRate,
-            interestRate: intPct / 100
-          })
-        : Store.addCard({
-            bankId: bankV,
-            cardLabel: label.value.trim(),
-            limit: limitV,
-            limitGroupId: groupId,
-            currentDebt: debtV,
-            statementDay: stV,
-            dueDay: duV,
-            minPaymentRate: selectedRate,
-            interestRate: intPct / 100
-          });
+        ? Store.updateCard(editing.id, common)
+        : Store.addCard(Object.assign({ currentDebt: debtV }, common));
       if (!saved) return;
 
       closeModal();

@@ -3,6 +3,8 @@ import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, fmtTL0, parseAmount } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, input } from '../modal.js';
+import { pct } from '../rate-fields.js';
+import { disclaimer } from '../disclaimer.js';
 import { overdraftModal } from './new-overdraft.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
@@ -40,16 +42,42 @@ export function overdraftDetailModal(id) {
     track.appendChild(fill);
     body.append(el('p', 'text-xs text-gray-500 dark:text-gray-400', 'Limit kullanımı: %' + Math.round(ratio * 100)), track);
 
-    /* Faiz maliyeti: avans hesap günlük işlediği için kullanıcı çoğu zaman aylık yükü görmez */
+    /*
+     * Faiz maliyeti. Avans hesapta faiz günlük işler ve dönem sonunda anaparaya
+     * eklenir; kart faizinden farklı olduğu için kalemler ayrı ayrı gösterilir.
+     */
     if (od.currentDebt > 0 && od.interestRate > 0) {
-      const monthlyCost = od.currentDebt * od.interestRate;
-      const warnBox = el('div', 'rounded-xl border border-warn/30 bg-warn/[.07] p-4 space-y-1');
+      const cost = Calc.overdraftCost(od, 30);
+      const warnBox = el('div', 'rounded-xl border border-warn/30 bg-warn/[.07] p-4 space-y-1.5');
+      const costRow = (label, value, cls) => {
+        const r = el('div', 'flex items-center justify-between text-sm gap-3');
+        r.append(el('span', 'text-gray-600 dark:text-gray-300', label),
+          el('span', 'font-semibold num text-right ' + (cls || ''), value));
+        return r;
+      };
+
       warnBox.append(
-        el('p', 'text-xs font-semibold text-yellow-700 dark:text-warn uppercase tracking-wider', 'Faiz maliyeti'),
-        el('p', 'text-sm num', 'Bu bakiye kapatılmazsa aylık yaklaşık ' + fmtTL.format(monthlyCost) + ' faiz işler.'),
+        el('p', 'text-xs font-semibold text-yellow-700 dark:text-warn uppercase tracking-wider', 'Faiz maliyeti (30 gün)'),
         el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
-          'Vergiler (BSMV/KKDF) hariç kaba hesaptır. Bilgi amaçlıdır, finans tavsiyesi değildir.')
+          'Günlük faiz: kullanılan tutar × (yıllık %' + pct(cost.annualRate) + ' / 365) × gün sayısı'),
+        costRow('Günlük faiz', fmtTL.format(Calc.overdraftCost(od, 1).interest)),
+        costRow('30 günlük faiz', fmtTL.format(cost.interest))
       );
+      if (cost.taxes.kkdf > 0) warnBox.appendChild(costRow('KKDF (%' + pct(od.kkdfRate) + ')', fmtTL.format(cost.taxes.kkdf)));
+      if (cost.taxes.bsmv > 0) warnBox.appendChild(costRow('BSMV (%' + pct(od.bsmvRate) + ')', fmtTL.format(cost.taxes.bsmv)));
+      warnBox.appendChild(costRow('Toplam aylık maliyet', fmtTL.format(cost.total), 'font-bold'));
+
+      // Tahakkuk eden faiz anaparaya eklendiği için yük her dönem büyür
+      const proj = Calc.overdraftProjection(od, 12);
+      if (proj) {
+        warnBox.append(
+          el('div', 'border-t border-black/10 dark:border-white/10 pt-2 mt-1'),
+          el('p', 'text-sm',
+            'Bakiye aynı kalır ve faiz her dönem anaparaya eklenirse 12 ay sonunda borç ' +
+            fmtTL.format(proj.closing) + ' olur (' + fmtTL.format(proj.interest + proj.taxes) + ' faiz ve vergi).')
+        );
+      }
+      warnBox.appendChild(disclaimer());
       body.appendChild(warnBox);
     }
 

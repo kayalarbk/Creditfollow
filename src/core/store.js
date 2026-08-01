@@ -5,6 +5,17 @@ import { AutoBackup } from './autobackup.js';
 
 const num = (v, fallback = 0) => (typeof v === 'number' && isFinite(v) ? v : fallback);
 const day = v => Math.min(Math.max(parseInt(v, 10) || 1, 1), 31);
+/** Oran alanı: 0–1 arası tutulur; bozuk değer varsayılana döner. */
+const rate = (v, fallback) => Math.min(Math.max(num(v, fallback), 0), 1);
+
+/** Ürün türünün vergi oranları; ürün kendi değerini taşıyorsa o kazanır. */
+function taxFields(product, type) {
+  const def = CONFIG.taxRates[type] || { kkdf: 0, bsmv: 0 };
+  return {
+    kkdfRate: rate(product.kkdfRate, def.kkdf),
+    bsmvRate: rate(product.bsmvRate, def.bsmv)
+  };
+}
 
 /**
  * Tek veri kaynağı: localStorage üzerinde CRUD.
@@ -43,7 +54,14 @@ export const Store = {
     2(out) {
       if (!Array.isArray(out.limitGroups)) out.limitGroups = [];
       out.cards.forEach(c => { if (c.limitGroupId === undefined) c.limitGroupId = null; });
-    }
+    },
+
+    /*
+     * v2 → v3: ürün bazında gecikme faizi ve vergi oranları.
+     * Alanların doldurulması normalize()'ın alan eşlemesinde yapılır (bozuk değer
+     * her yüklemede onarılsın diye); bu adım yalnızca sürümü ilerletir.
+     */
+    3() {}
   },
 
   /** Veriyi sürüm sürüm güncel şemaya taşır. */
@@ -87,7 +105,10 @@ export const Store = {
         dueDay: day(c.dueDay),
         minPaymentRate: num(c.minPaymentRate, CONFIG.minPaymentRates[0]),
         // Aylık akdi faiz oranı; 0 = faiz projeksiyonu gösterilmez
-        interestRate: Math.min(Math.max(num(c.interestRate, CONFIG.defaultInterestRate), 0), 1),
+        interestRate: rate(c.interestRate, CONFIG.defaultInterestRate),
+        // Asgari ödenmediğinde ödenmeyen asgari kısma işleyen gecikme faizi
+        overdueRate: rate(c.overdueRate, CONFIG.defaultOverdueRate),
+        ...taxFields(c, 'card'),
         // Renk yoksa sıraya göre dağıt; hepsine aynı gradyanı vermek kartları ayırt edilemez kılar
         color: Array.isArray(c.color) && c.color.length === 2
           ? c.color
@@ -130,7 +151,8 @@ export const Store = {
           label: String(o.label || 'Avans hesap'),
           limit: num(o.limit),
           currentDebt: Math.max(0, num(o.currentDebt)),
-          interestRate: Math.min(Math.max(num(o.interestRate, CONFIG.defaultOverdraftRate), 0), 1),
+          interestRate: rate(o.interestRate, CONFIG.defaultOverdraftRate),
+          ...taxFields(o, 'overdraft'),
           color: Array.isArray(o.color) && o.color.length === 2
             ? o.color
             : CONFIG.cardGradients[(i + 2) % CONFIG.cardGradients.length],
@@ -150,6 +172,7 @@ export const Store = {
           label: String(l.label || 'İhtiyaç kredisi'),
           principal: num(l.principal),
           monthlyPayment: num(l.monthlyPayment),
+          ...taxFields(l, 'loan'),
           totalInstallments: total,
           // Ödenen taksit toplamı aşamaz; aşarsa kalan borç negatife düşerdi
           paidInstallments: Math.min(Math.max(parseInt(l.paidInstallments, 10) || 0, 0), total),

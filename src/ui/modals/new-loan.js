@@ -4,6 +4,7 @@ import { el } from '../../utils/dom.js';
 import { fmtTL, fmtDate, parseAmount, safeDate } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, primaryButton, showErr, clearErrs } from '../modal.js';
 import { bankSelect } from '../bank-select.js';
+import { rateFields } from '../rate-fields.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 
@@ -101,6 +102,7 @@ export function loanModal(editId) {
     paintPreview();
 
     const submit = primaryButton(editing ? 'Değişikliği kaydet' : 'Krediyi ekle');
+    const rates = rateFields('loan', editing);
 
     body.append(
       bankField,
@@ -110,6 +112,7 @@ export function loanModal(editId) {
       countGrid,
       firstField,
       preview,
+      rates.wrap,
       submit
     );
     box.appendChild(body);
@@ -132,9 +135,10 @@ export function loanModal(editId) {
       if (isNaN(paidV) || paidV < 0) { showErr('err-paid', 'Geçerli bir sayı girin (boş bırakılırsa 0).'); valid = false; }
       else if (!isNaN(totalV) && paidV > totalV) { showErr('err-paid', 'Ödenen taksit toplamı aşamaz.'); valid = false; }
       if (!firstV) { showErr('err-first', 'İlk taksit tarihini seçin.'); valid = false; }
+      if (!rates.validate()) valid = false;
       if (!valid) return;
 
-      const patch = {
+      const patch = Object.assign({
         bankId: bankV,
         label: label.value.trim() || 'İhtiyaç kredisi',
         principal: principalV,
@@ -142,7 +146,7 @@ export function loanModal(editId) {
         totalInstallments: totalV,
         paidInstallments: paidV,
         firstPaymentDate: firstV.toISOString()
-      };
+      }, rates.values());
       const saved = editing ? Store.updateLoan(editing.id, patch) : Store.addLoan(patch);
       if (!saved) return;
 

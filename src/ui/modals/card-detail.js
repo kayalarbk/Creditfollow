@@ -3,6 +3,8 @@ import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
 import { fmtTL, fmtTL0, fmtDate, fmtDateShort, dateSort } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader } from '../modal.js';
+import { pct } from '../rate-fields.js';
+import { disclaimer } from '../disclaimer.js';
 import { buildTxRow } from '../tx-row.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
@@ -104,6 +106,30 @@ export function cardDetailModal(cardId) {
       } else {
         stBox.appendChild(stRow('Kalan asgari', fmtTL.format(st.remainingMin), 'text-danger font-bold'));
       }
+
+      /*
+       * Bu dönemin faiz yükü. Faiz ve vergi ayrı satır: kullanıcı ekstresindeki
+       * kalemlerle birebir karşılaştırabilsin.
+       */
+      const int = Calc.statementInterest(card);
+      if (int && int.total > 0) {
+        stBox.appendChild(el('div', 'border-t border-black/5 dark:border-white/10 pt-2 mt-1'));
+        stBox.appendChild(el('p', 'text-xs font-semibold text-gray-500 dark:text-gray-400',
+          'Bu dönem işleyecek faiz'));
+        if (int.contractual > 0) {
+          stBox.appendChild(stRow('Akdi faiz (%' + pct(card.interestRate) + ')', fmtTL.format(int.contractual)));
+        }
+        if (int.overdue > 0) {
+          stBox.appendChild(stRow('Gecikme faizi (%' + pct(card.overdueRate) + ')',
+            fmtTL.format(int.overdue), 'text-danger'));
+        }
+        if (int.taxes.kkdf > 0) stBox.appendChild(stRow('KKDF (%' + pct(card.kkdfRate) + ')', fmtTL.format(int.taxes.kkdf)));
+        if (int.taxes.bsmv > 0) stBox.appendChild(stRow('BSMV (%' + pct(card.bsmvRate) + ')', fmtTL.format(int.taxes.bsmv)));
+        stBox.appendChild(stRow('Toplam faiz ve vergi', fmtTL.format(int.total), 'font-bold'));
+        stBox.appendChild(disclaimer());
+      } else if (int && st.isFullPaid) {
+        stBox.appendChild(el('p', 'text-xs text-ok', 'Ekstre tamamı ödendiği için alışverişlere faiz işlemez.'));
+      }
     }
     body.appendChild(stBox);
 
@@ -158,12 +184,12 @@ export function cardDetailModal(cardId) {
         projBox.append(
           el('p', 'text-sm', 'Borcun kapanması: ' + (proj.capped ? '30 yıldan uzun' : sure)),
           el('p', 'text-sm', 'Ödenecek toplam faiz: ' + fmtTL.format(proj.totalInterest)),
-          el('p', 'text-sm font-semibold', 'Toplamda ödersin: ' + fmtTL.format(proj.totalPaid))
+          el('p', 'text-sm', 'Faiz üzerinden vergi (KKDF + BSMV): ' + fmtTL.format(proj.totalTax)),
+          el('p', 'text-sm font-semibold', 'Toplamda ödersiniz: ' + fmtTL.format(proj.totalPaid))
         );
       }
-      projBox.appendChild(el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
-        'Aylık %' + String(Math.round(card.interestRate * 10000) / 100).replace('.', ',') +
-        ' faiz ve yeni harcama yapılmadığı varsayımıyla. Bilgi amaçlıdır, yatırım veya finans tavsiyesi değildir.'));
+      projBox.appendChild(disclaimer(
+        'Aylık %' + pct(card.interestRate) + ' faiz ve yeni harcama yapılmadığı varsayımıyla.'));
       body.appendChild(projBox);
     }
 

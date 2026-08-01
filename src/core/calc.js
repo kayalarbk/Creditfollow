@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { Store } from './store.js';
+import { Interest } from './interest.js';
 import { safeDate } from '../utils/format.js';
 
 /** Tarih ve finans hesapları — saf fonksiyonlar, DOM'a dokunmaz. */
@@ -583,41 +584,108 @@ export const Calc = {
     return { items, total: Math.round(total * 100) / 100 };
   },
 
+  /* ---------- faiz: ürün türüne göre interest.js'e devredilir ---------- */
+
+  /** Ürünün vergi oranları (üründe yoksa tür varsayılanı). */
+  taxRates(product) {
+    return { kkdf: product.kkdfRate || 0, bsmv: product.bsmvRate || 0 };
+  },
+
   /**
    * Yalnızca asgari ödeme yapılırsa borcun kapanma projeksiyonu.
-   * Her ay: faiz işler, ardından kalan borcun asgari oranı ödenir.
-   * Asgari ödeme faizi karşılamıyorsa borç büyür; bu durum ayrıca bildirilir.
+   * Hesap interest.js'te; burada yalnızca kartın oranları toplanır.
    */
   payoffProjection(card, maxMonths = 360) {
-    const rate = card.interestRate;
-    if (!rate || rate <= 0 || card.currentDebt <= 0) return null;
+    return Interest.cardPayoffProjection({
+      balance: card.currentDebt,
+      monthlyRate: card.interestRate,
+      minPaymentRate: card.minPaymentRate,
+      taxRates: this.taxRates(card),
+      maxMonths
+    });
+  },
 
-    let balance = card.currentDebt;
-    let totalInterest = 0;
-    let months = 0;
+  /**
+   * Kesilmiş ekstrenin faiz ve vergi yükü.
+   * Ekstre tamamı ödendiyse 0; asgari ödenmediyse ödenmeyen asgariye gecikme faizi.
+   */
+  statementInterest(card) {
+    const st = this.statementSummary(card);
+    if (!st.hasStatement) return null;
 
-    while (balance > 0.5 && months < maxMonths) {
-      const interest = balance * rate;
-      const withInterest = balance + interest;
-      const payment = withInterest * card.minPaymentRate;
+    return Interest.cardStatementInterest({
+      statementBalance: st.balance,
+      paid: st.paidSince,
+      minPayment: st.minPayment,
+      monthlyRate: card.interestRate,
+      overdueRate: card.overdueRate,
+      taxRates: this.taxRates(card)
+    });
+  },
 
-      // Ödeme faizi karşılamıyorsa borç hiç kapanmaz
-      if (payment <= interest + 0.005) {
-        return { months: null, totalInterest: null, neverEnds: true, firstPayment: Math.round(payment * 100) / 100 };
-      }
-
-      totalInterest += interest;
-      balance = withInterest - payment;
-      months += 1;
-    }
-
+  /**
+   * Avans hesabın faiz maliyeti: günlük işler, dönem sonunda anaparaya eklenir.
+   * Saklanan oran aylık olduğu için günlük hesap yıllığa çevrilerek yapılır.
+   */
+  overdraftCost(od, days = 30) {
+    const annual = Interest.monthlyToAnnual(od.interestRate);
+    const interest = Interest.dailyInterest(od.currentDebt, annual, days);
+    const taxes = Interest.taxesOn(interest, this.taxRates(od));
     return {
-      months,
-      totalInterest: Math.round(totalInterest * 100) / 100,
-      totalPaid: Math.round((card.currentDebt + totalInterest) * 100) / 100,
-      neverEnds: false,
-      capped: months >= maxMonths
+      days,
+      annualRate: annual,
+      dailyRate: annual / 365,
+      interest,
+      taxes,
+      total: Math.round((interest + taxes.total) * 100) / 100
     };
+  },
+
+  /** Avans hesapta bakiye sabit kalırsa 12 aylık bileşik faiz projeksiyonu. */
+  overdraftProjection(od, periods = 12) {
+    if (!(od.currentDebt > 0) || !(od.interestRate > 0)) return null;
+    return Interest.overdraftCompound({
+      balance: od.currentDebt,
+      annualRate: Interest.monthlyToAnnual(od.interestRate),
+      periods,
+      daysPerPeriod: 30,
+      taxRates: this.taxRates(od)
+    });
+  },
+
+  /**
+   * Kredinin amortisman tablosu.
+   * Faiz oranı veri modelinde tutulmaz; taksit, anapara ve vadeden türetilir.
+   */
+  loanAmortization(loan) {
+    return Interest.amortizationSchedule({
+      principal: loan.principal,
+      payment: loan.monthlyPayment,
+      months: loan.totalInstallments,
+      firstPaymentDate: safeDate(loan.firstPaymentDate) || this.today(),
+      taxRates: this.taxRates(loan)
+    });
+  },
+
+  /** Kredinin erken kapama tutarı: kalan anapara + son taksitten beri işleyen faiz. */
+  loanEarlyPayoff(loan) {
+    const schedule = this.loanAmortization(loan);
+    const s = this.loanSummary(loan);
+    // Son ödenen taksitten bugüne geçen gün: kalan anaparaya işleyen faizin süresi
+    const lastPaid = loan.paidInstallments > 0
+      ? this.addMonths(safeDate(loan.firstPaymentDate) || this.today(), loan.paidInstallments - 1)
+      : null;
+    const accruedDays = lastPaid ? Math.max(Interest.daysBetween(lastPaid, this.today()), 0) : 0;
+
+    return Object.assign(
+      Interest.earlyPayoffAmount({
+        schedule,
+        paidCount: loan.paidInstallments,
+        accruedDays,
+        taxRates: this.taxRates(loan)
+      }),
+      { accruedDays, monthlyRate: schedule.monthlyRate, remainingCount: s.remainingCount }
+    );
   },
 
   /**

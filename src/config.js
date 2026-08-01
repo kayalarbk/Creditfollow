@@ -10,8 +10,9 @@ export const CONFIG = {
    * Store.normalize() içinde çalışır.
    *   1 → ilk şema
    *   2 → ortak limit havuzu (limitGroups, card.limitGroupId)
+   *   3 → ürün bazında gecikme faizi ve vergi oranları (overdueRate, kkdfRate, bsmvRate)
    */
-  schemaVersion: 2,
+  schemaVersion: 3,
   usageThresholds: { warn: 0.5, danger: 0.8 },
   statusColors: { ok: '#30D158', warn: '#FFD60A', danger: '#FF453A' },
   accent: '#0A84FF',
@@ -21,6 +22,21 @@ export const CONFIG = {
   defaultInterestRate: 0.0425,
   /* Avans (kredili mevduat) hesapları kart faizinden yüksek işler; ayrı varsayılan tutulur. */
   defaultOverdraftRate: 0.055,
+  /* Asgari ödenmediğinde ödenmeyen asgari kısma işleyen gecikme faizi (aylık). */
+  defaultOverdueRate: 0.0525,
+
+  /*
+   * Faiz üzerinden alınan vergi/fon oranları (KKDF, BSMV).
+   * Mevzuatla değiştiği için koda gömülmez: buradaki değerler yalnızca varsayılandır,
+   * her ürün kendi formundan override edebilir (kart/avans/kredi ayrı ayrı).
+   * Hesap çıktısında faiz ve vergi ayrı satır olarak gösterilir ki ekstreyle
+   * karşılaştırılabilsin.
+   */
+  taxRates: {
+    card: { kkdf: 0.15, bsmv: 0.10 },
+    overdraft: { kkdf: 0.15, bsmv: 0.10 },
+    loan: { kkdf: 0.15, bsmv: 0.10 }
+  },
 
   /* Ürün türleri — id veri dosyasına yazılmaz, gösterim ve gruplama içindir */
   productTypes: {

@@ -4,6 +4,7 @@ import { el } from '../../utils/dom.js';
 import { parseAmount } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader, field, input, primaryButton, showErr, clearErrs } from '../modal.js';
 import { bankSelect } from '../bank-select.js';
+import { rateFields } from '../rate-fields.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
 
@@ -49,13 +50,19 @@ export function overdraftModal(editId) {
       'Hesabınızdaki eksi bakiye. Ödeme yaptıkça bu alanı güncelleyin.'));
 
     const submit = primaryButton(editing ? 'Değişikliği kaydet' : 'Hesabı ekle');
+    const rates = rateFields('overdraft', editing);
+
+    const interestField = field('Aylık faiz oranı (%)', interest, 'err-int');
+    interestField.appendChild(el('p', 'text-xs text-gray-400 dark:text-gray-500 mt-1.5',
+      'Avans hesapta faiz günlük işler: aylık oran 12 ile çarpılıp 365 güne bölünerek kullanılır.'));
 
     body.append(
       bankField,
       field('Hesap etiketi', label),
       field('Avans limiti (₺)', limit, 'err-limit'),
       debtField,
-      field('Aylık faiz oranı (%)', interest, 'err-int'),
+      interestField,
+      rates.wrap,
       submit
     );
     box.appendChild(body);
@@ -74,15 +81,16 @@ export function overdraftModal(editId) {
       if (isNaN(debtV) || debtV < 0) { showErr('err-debt', 'Geçerli bir tutar girin (boş bırakılırsa 0).'); valid = false; }
       if (!isNaN(limitV) && !isNaN(debtV) && debtV > limitV) { showErr('err-debt', 'Kullanılan tutar limiti aşamaz.'); valid = false; }
       if (isNaN(intPct) || intPct < 0 || intPct > 100) { showErr('err-int', '0–100 arası bir oran girin.'); valid = false; }
+      if (!rates.validate()) valid = false;
       if (!valid) return;
 
-      const patch = {
+      const patch = Object.assign({
         bankId: bankV,
         label: label.value.trim() || 'Avans hesap',
         limit: limitV,
         currentDebt: debtV,
         interestRate: intPct / 100
-      };
+      }, rates.values());
       const saved = editing ? Store.updateOverdraft(editing.id, patch) : Store.addOverdraft(patch);
       if (!saved) return;
 

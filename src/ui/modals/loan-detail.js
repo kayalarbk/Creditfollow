@@ -1,8 +1,10 @@
 import { Store } from '../../core/store.js';
 import { Calc } from '../../core/calc.js';
 import { el } from '../../utils/dom.js';
-import { fmtTL, fmtTL0, fmtDate } from '../../utils/format.js';
+import { fmtTL, fmtTL0, fmtDate, fmtDateShort } from '../../utils/format.js';
 import { openModal, closeModal, modalHeader } from '../modal.js';
+import { pct } from '../rate-fields.js';
+import { disclaimer } from '../disclaimer.js';
 import { loanModal } from './new-loan.js';
 import { renderAll } from '../router.js';
 import { toast } from '../toast.js';
@@ -78,6 +80,72 @@ export function loanDetailModal(id) {
       }
     }
     body.appendChild(planBox);
+
+    /*
+     * Amortisman tablosu. Kredinin faiz oranı veri modelinde tutulmaz; taksit,
+     * anapara ve vadeden türetilir (bkz. Interest.impliedMonthlyRate).
+     */
+    const schedule = Calc.loanAmortization(loan);
+    if (schedule.rows.length > 0) {
+      const amortBox = el('div', 'rounded-xl bg-black/[.03] dark:bg-white/5 p-4 space-y-2');
+      amortBox.append(
+        el('p', 'text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider', 'Ödeme planı (amortisman)'),
+        el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+          'Taksit ve vadeden hesaplanan aylık faiz oranı: %' + pct(schedule.monthlyRate) +
+          ' · toplam faiz ' + fmtTL0.format(schedule.totalInterest) +
+          ' · toplam vergi ' + fmtTL0.format(schedule.totalTax))
+      );
+
+      /* Uzun vadede tablo taşmasın diye kendi içinde kaydırılır */
+      const scroll = el('div', 'max-h-64 overflow-y-auto overflow-x-auto -mx-1 px-1');
+      const table = el('table', 'w-full text-xs num');
+      const thead = el('thead', 'text-gray-500 dark:text-gray-400');
+      const htr = el('tr');
+      ['#', 'Tarih', 'Taksit', 'Anapara', 'Faiz', 'Vergi', 'Kalan'].forEach((h, i) => {
+        const th = el('th', 'py-1 font-semibold ' + (i <= 1 ? 'text-left' : 'text-right'), h);
+        th.scope = 'col';
+        htr.appendChild(th);
+      });
+      thead.appendChild(htr);
+
+      const tbody = el('tbody');
+      schedule.rows.forEach(r => {
+        const paid = r.no <= loan.paidInstallments;
+        const tr = el('tr', 'border-t border-black/5 dark:border-white/5 ' +
+          (paid ? 'text-gray-400 dark:text-gray-500 line-through' : ''));
+        const cells = [
+          String(r.no),
+          r.date ? fmtDateShort.format(r.date) : '—',
+          fmtTL0.format(r.payment),
+          fmtTL0.format(r.principal),
+          fmtTL0.format(r.interest),
+          fmtTL0.format(r.taxes),
+          fmtTL0.format(r.balance)
+        ];
+        cells.forEach((c, i) => tr.appendChild(el('td', 'py-1 ' + (i <= 1 ? 'text-left' : 'text-right'), c)));
+        tbody.appendChild(tr);
+      });
+
+      table.append(thead, tbody);
+      scroll.appendChild(table);
+      amortBox.appendChild(scroll);
+
+      /* Erken kapama: kalan taksitlerin toplamı değil, kalan anapara + işlemiş faiz */
+      if (!s.isFinished) {
+        const payoff = Calc.loanEarlyPayoff(loan);
+        amortBox.append(
+          el('div', 'border-t border-black/5 dark:border-white/10 pt-2 mt-1'),
+          planRow('Kalan anapara', fmtTL.format(payoff.principal)),
+          planRow('Erken kapama tutarı', fmtTL.format(payoff.total), 'font-bold'),
+          el('p', 'text-[11px] text-gray-500 dark:text-gray-400',
+            'Kalan taksitlerin toplamı ' + fmtTL.format(s.remainingDebt) + '; bugün kapatırsanız ' +
+            fmtTL.format(Math.max(s.remainingDebt - payoff.total, 0)) + ' faiz ödemezsiniz. ' +
+            'Bankaların erken kapama komisyonu bu hesaba dahil değildir.')
+        );
+      }
+      amortBox.appendChild(disclaimer());
+      body.appendChild(amortBox);
+    }
 
     /* Taksit işaretleme — kredinin işlem defteri yoktur, sayaç tek doğruluk kaynağıdır */
     const btn = (cls, text, onClick, disabled) => {

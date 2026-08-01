@@ -50,7 +50,8 @@ tarayıcıda çalışan panel.
 | 2026-07-22 | `91ba92e` | **feat:** avans hesap (kredili mevduat) ve ihtiyaç kredisi ürünleri; ürünler banka varlığı altında gruplandı |
 | 2026-07-22 | (bu commit) | **docs:** PROGRESS.md proje hafızası dosyası eklendi |
 | 2026-07-22 | (bu commit) | **fix:** geçmişe dönük borçla eklenen kartta, kart eklenmeden önce son ödeme günü geçmiş ekstre için gecikme uyarısı çıkmıyor; sonraki dönem bekleniyor |
-| 2026-08-01 | (bu commit) | **feat:** ortak limit havuzu — aynı bankanın birden fazla kartı tek limiti paylaşabiliyor (`limitGroups`, `schemaVersion: 2`, göç zinciri, havuz yönetim modalı, panelde havuz bloğu) |
+| 2026-08-01 | `fe6d283` | **feat:** ortak limit havuzu — aynı bankanın birden fazla kartı tek limiti paylaşabiliyor (`limitGroups`, `schemaVersion: 2`, göç zinciri, havuz yönetim modalı, panelde havuz bloğu) |
+| 2026-08-01 | (bu commit) | **feat:** ürün türüne göre ayrı faiz motoru (`core/interest.js`) + 32 birim testi; vergi oranları ürün bazında düzenlenebilir, kredi amortisman tablosu ve erken kapama |
 
 ### Mevcut özellik seti
 - **Panel (dashboard):** toplam borç/limit donutu, borç seyri grafiği, yaklaşan ödemeler,
@@ -65,7 +66,9 @@ tarayıcıda çalışan panel.
 - **Ortak limit havuzu:** aynı bankanın kartları tek limiti paylaşabilir; toplam limit
   havuzu bir kez sayar, kullanılabilir limit havuzun tamamından hesaplanır, kartların
   kesim/son ödeme tarihleri ayrı kalır
-- **Faiz projeksiyonu:** kart/avans bazında akdi faiz oranı ile borç projeksiyonu
+- **Faiz motoru:** ürün türüne göre ayrı hesap — kartta ekstre dönemi bazlı akdi/gecikme
+  faizi, avans hesapta günlük işleyen ve dönem sonunda anaparaya eklenen bileşik faiz,
+  kredide annüite amortisman tablosu + erken kapama. Faiz ve vergi (KKDF/BSMV) ayrı satır.
 - **Dışa/içe aktarma:** JSON yedek + filtreli CSV (Excel uyumlu)
 - **Otomatik yedek:** File System Access API ile seçilen dosyaya sürekli yazma, veri
   boşsa dosyadan geri yükleme
@@ -78,7 +81,9 @@ tarayıcıda çalışan panel.
 ```
 Creditfollow/
 ├── index.html                       # Yalnızca markup — mantık içermez
-├── package.json                     # dev script (npx serve), tip: module
+├── package.json                     # dev + test script (node --test), tip: module
+├── test/
+│   └── interest.test.js             # Faiz motoru birim testleri — `npm test`, harici bağımlılık yok
 ├── PROGRESS.md                      # ← bu dosya, proje hafızası
 ├── assets/
 │   ├── css/app.css                  # Tailwind ile ifade edilemeyen özel stiller
@@ -91,7 +96,8 @@ Creditfollow/
     ├── events.js                    # Tüm DOM olay bağlamaları ve klavye kısayolları
     ├── core/
     │   ├── store.js                 # Tek veri kaynağı: localStorage CRUD + normalize() ile şema göçü/onarımı
-    │   ├── calc.js                  # Tüm iş hesapları: ekstre dönemi, asgari ödeme, taksit, faiz projeksiyonu, özetler
+    │   ├── calc.js                  # Tüm iş hesapları: ekstre dönemi, asgari ödeme, taksit, özetler
+│   ├── interest.js              # Faiz motoru: kart / avans / kredi ayrı formüller + vergiler (saf, Store'suz)
     │   ├── backup.js                # JSON dışa/içe aktarma, otomatik geri yükleme kararı
     │   ├── autobackup.js            # File System Access API sarmalayıcı (izin, debounce'lu yazma)
     │   └── theme.js                 # Koyu/açık tema durumu
@@ -103,6 +109,8 @@ Creditfollow/
     │   ├── tx-row.js                # Tek işlem satırı bileşeni
     │   ├── notifications.js         # Bildirim zili ve uyarı listesi
     │   ├── toast.js                 # Geçici bildirim (ok/warn/danger) + undo aksiyonu
+    │   ├── rate-fields.js           # Ürün formlarının ortak "gelişmiş oranlar" bölümü (gecikme faizi, KKDF, BSMV)
+    │   ├── disclaimer.js            # "Hesaplama aracıdır, tavsiye değildir" notu — tek metin, tek yer
     │   ├── views/
     │   │   ├── dashboard.js         # Panel: widget'lar, kart listesi, son işlemler
     │   │   ├── transactions.js      # İşlem listesi + filtreler (tarih aralığı, kategori, kart)
@@ -173,6 +181,32 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
       satırında ayrı görünmeye devam eder.
     - Boş kalan havuz silinmez, uyarı gösterilir (kullanıcı kartı geri alabilir).
     - Harcama/mutabakat limit kontrolleri havuzdaki kart için ortak limite bakar.
+13. **Faiz motoru ürün türüne göre ayrıldı (2026-08-01).** Kart, avans ve kredi aynı
+    projeksiyon formülünü kullanıyordu; sapma vade uzadıkça büyüyordu. Yeni dosya
+    `src/core/interest.js`:
+    - **Saf ve bağımsız:** DOM, `Store` ve hatta `CONFIG` bilmez; oranlar ve tarihler
+      parametre olarak gelir. Bu sayede Node altında doğrudan import edilip test edilebiliyor
+      (`core/` diğer modülleri `store.js → ui/toast.js` üzerinden DOM'a bağlı).
+    - **Kart:** faiz ekstre dönemi bazında işler. Tamamı ödenirse faiz yok; asgari ödenmezse
+      yalnızca **ödenmeyen asgari kısma** gecikme faizi, kalanına akdi faiz. Nakit avans için
+      işlem tarihinden itibaren gün bazlı faiz (`cashAdvanceInterest`).
+    - **Avans hesap:** `kullanılan × (yıllık oran / 365) × gün`. Her hareket bir bakiye kırılım
+      noktasıdır (`balanceSegments`); dönem sonunda tahakkuk anaparaya eklenir (bileşik).
+      Saklanan oran aylıktır, günlük hesap için 12 ile çarpılıp 365'e bölünür.
+    - **Kredi:** annüite amortisman tablosu. Faiz oranı veri modelinde **tutulmaz**; kullanıcı
+      taksiti bilir, oranı çoğu zaman bilmez. Oran taksit/anapara/vadeden ikili aramayla
+      türetilir (`impliedMonthlyRate`) — annüite formülünün kapalı tersi yoktur.
+    - **Vergi yönü türe göre farklıdır:** kart ve avansta oran vergisiz ilan edildiği için
+      KKDF/BSMV faizin **üstüne** eklenir; kredide taksit vergi dahil ilan edildiği için
+      vergi faizin **içinden** ayrıştırılır. Aksi hâlde kredide çift sayım olurdu.
+14. **Vergi oranları config'te, ürün bazında override edilebilir (2026-08-01).**
+    `CONFIG.taxRates` yalnızca varsayılan; her üründe `kkdfRate`/`bsmvRate`, kartta ayrıca
+    `overdueRate` alanı var ve form üzerinden değiştirilebiliyor (`ui/rate-fields.js`,
+    üç formda ortak). Mevzuat değiştiğinde kod değişmesi gerekmesin diye.
+    Çıktılarda faiz ve vergi ayrı satır: kullanıcı ekstresiyle karşılaştırabilsin.
+15. **Ton: hesaplama, tavsiye değil (2026-08-01).** Faiz/senaryo gösteren her kutunun
+    altında `ui/disclaimer.js` metni durur. Metin tek yerde tutulur ki tüm ekranlarda
+    aynı dille çıksın.
 
 ---
 
@@ -180,11 +214,14 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
 
 - [ ] `README.md` çalışma alanında silinmiş durumda (`git status` → `D README.md`).
       Karar verilmeli: geri yüklensin mi, yoksa silme commit'lensin mi?
-- [ ] Test altyapısı yok — en azından `calc.js` için birim testleri (ekstre dönemi,
-      asgari ödeme, taksit dağılımı, faiz projeksiyonu) eklenmeli. Not: `core/` modülleri
-      `store.js` → `ui/toast.js` üzerinden DOM'a bağlı olduğu için Node altında doğrudan
-      import edilemiyor; saf hesap katmanı (`interest.js`) DOM'suz yazılacak ve testler
-      oradan başlayacak.
+- [x] ~~Test altyapısı yok.~~ 2026-08-01: `npm test` (`node --test`, harici bağımlılık yok)
+      ve `test/interest.test.js` eklendi — 32 test: gün sayımı sınırları, artık yıl, günlük
+      faiz, annüite/amortisman tutarlılığı, ekstre tamamı ödendiğinde faiz sıfır, asgari altı
+      ödemede gecikme faizi, erken kapama.
+- [ ] `calc.js` hâlâ test edilemiyor: `store.js` → `ui/toast.js` üzerinden DOM'a bağlı.
+      Test edilebilmesi için Store'un toast bağımlılığı enjekte edilebilir hâle gelmeli
+      (ör. `Store.onError` geri çağrısı). Faiz mantığı `interest.js`'e taşındığı için
+      aciliyeti azaldı.
 - [ ] Ortak limit havuzu yalnızca kredi kartlarını kapsıyor; avans hesabın da aynı
       havuza girdiği bankalar var mı, kullanıcı geri bildirimiyle değerlendirilecek.
 - [x] ~~`refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.~~
@@ -193,7 +230,11 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
       `main` periyodik olarak ileri sarılıyor.
 - [ ] Tailwind CDN kullanılıyor — çevrimdışı çalışmayı garanti etmiyor; yerel kopya
       veya build adımı değerlendirilmeli.
-- [ ] İhtiyaç kredisi için ödeme planı (amortisman tablosu) detaylandırılabilir.
+- [x] ~~İhtiyaç kredisi için ödeme planı (amortisman tablosu) detaylandırılabilir.~~
+      2026-08-01: kredi detayında taksit bazlı amortisman tablosu (anapara/faiz/vergi/kalan)
+      ve erken kapama tutarı eklendi.
+- [ ] Nakit avans faizi (`Interest.cashAdvanceInterest`) motorda var ama işlem formunda
+      "nakit avans" işareti yok; işlem türüne alan eklenince bağlanacak.
 - [ ] Çoklu para birimi desteği yok (`settings.currency` var ama TRY sabit gibi davranıyor).
 - [ ] Otomatik yedekte sürüm/çakışma yönetimi yok; aynı dosya birden fazla sekmeden
       yazılırsa son yazan kazanır.
