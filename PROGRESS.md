@@ -10,7 +10,7 @@
 >   commit'lenir ve push'lanır. Commit mesajı formatı: `feat/fix/docs: kısa açıklama`
 > - Push yapılmadan görev tamamlanmış sayılmaz / raporlanmaz.
 
-Son güncelleme: 2026-08-01
+Son güncelleme: 2026-08-07
 
 ---
 
@@ -51,6 +51,7 @@ tarayıcıda çalışan panel.
 | 2026-07-22 | (bu commit) | **docs:** PROGRESS.md proje hafızası dosyası eklendi |
 | 2026-07-22 | (bu commit) | **fix:** geçmişe dönük borçla eklenen kartta, kart eklenmeden önce son ödeme günü geçmiş ekstre için gecikme uyarısı çıkmıyor; sonraki dönem bekleniyor |
 | 2026-08-01 | `fe6d283` | **feat:** ortak limit havuzu — aynı bankanın birden fazla kartı tek limiti paylaşabiliyor (`limitGroups`, `schemaVersion: 2`, göç zinciri, havuz yönetim modalı, panelde havuz bloğu) |
+| 2026-08-07 | (bu commit) | **docs:** `main` `58a2680`'e ileri sarıldı ve push'landı — site (GitHub Pages) `main`'den yayınlandığı için 08-01 işleri canlıya yansımamıştı; deploy doğrulandı |
 | 2026-08-01 | (bu commit) | **feat:** ürün türüne göre ayrı faiz motoru (`core/interest.js`) + 32 birim testi; vergi oranları ürün bazında düzenlenebilir, kredi amortisman tablosu ve erken kapama |
 
 ### Mevcut özellik seti
@@ -226,8 +227,14 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
       havuza girdiği bankalar var mı, kullanıcı geri bildirimiyle değerlendirilecek.
 - [x] ~~`refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.~~
       2026-07-22'de `main` ileri sarıldı (fast-forward) ve push'landı; iki dal da `2e787ef`.
+      2026-08-07'de tekrar ileri sarıldı; iki dal da `58a2680`.
       Not: çalışma dalı hâlâ `refactor/proje-yapisi`; yeni işler burada yapılıp
       `main` periyodik olarak ileri sarılıyor.
+      **DİKKAT — deploy kuralı:** Site GitHub Pages ile `main` dalından yayınlanıyor
+      (https://kayalarbk.github.io/Creditfollow/). Çalışma dalına push etmek canlıyı
+      GÜNCELLEMEZ; iş bittiğinde ayrıca
+      `git push origin refactor/proje-yapisi:main` çalıştırılmalı.
+      2026-08-01 işlerinin sitede görünmemesinin sebebi buydu.
 - [ ] Tailwind CDN kullanılıyor — çevrimdışı çalışmayı garanti etmiyor; yerel kopya
       veya build adımı değerlendirilmeli.
 - [x] ~~İhtiyaç kredisi için ödeme planı (amortisman tablosu) detaylandırılabilir.~~
