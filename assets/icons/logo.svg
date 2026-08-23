@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="KartPanel logosu">
+  <defs>
+    <linearGradient id="kpg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#5E5CE6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114.5" fill="url(#kpg)"/>
+  <!-- arka kart -->
+  <g transform="translate(256 197.1) rotate(-15)">
+    <rect x="-158.7" y="-102.4" width="317.4" height="204.8" rx="28.2" fill="#fff" opacity=".43"/>
+  </g>
+  <!-- ön kart -->
+  <g transform="translate(256 294.4) rotate(-15)">
+    <rect x="-168.95" y="-110.1" width="337.9" height="220.2" rx="30.7" fill="#fff"/>
+    <rect x="-135.16" y="-66.06" width="114.9" height="30.8" rx="15.4" fill="#D6E2F5"/>
+    <g fill="#0A84FF">
+      <rect x="-128.4" y="17.7"  width="35.5" height="48.4"  rx="14.2"/>
+      <rect x="-74.3"  y="-8.8"  width="35.5" height="74.9"  rx="14.2"/>
+      <rect x="-20.2"  y="-35.2" width="35.5" height="101.3" rx="14.2"/>
+      <path d="M40.5 8.8 L121.6 -44" stroke="#0A84FF" stroke-width="15.2" stroke-linecap="round"/>
+      <path d="M121.6 -44 L64.2 -44 L121.6 13.4 Z"/>
+    </g>
+  </g>
+</svg>

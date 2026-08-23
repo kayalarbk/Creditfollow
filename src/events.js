@@ -2,6 +2,7 @@ import { Store } from './core/store.js';
 import { Theme } from './core/theme.js';
 import { Backup, applyAutoRestore } from './core/backup.js';
 import { AutoBackup } from './core/autobackup.js';
+import { PWA } from './core/pwa.js';
 import { byId } from './utils/dom.js';
 import { Charts } from './ui/charts.js';
 import { switchView, renderAll } from './ui/router.js';
@@ -152,6 +153,19 @@ function bindSettings() {
     if (e.target.files[0]) Backup.importJSON(e.target.files[0]);
     e.target.value = '';
   });
+
+  byId('installBtn').addEventListener('click', async () => {
+    const outcome = await PWA.promptInstall();
+    renderSettings();
+    if (outcome === 'unavailable') {
+      toast('Tarayıcı şu an kurulum istemi vermiyor. Adres çubuğundaki yükle simgesini deneyin.', 'warn');
+    } else if (outcome === 'dismissed') {
+      toast('Kurulum iptal edildi.', 'warn');
+    }
+  });
+
+  // Kurulabilirlik sonradan doğduğunda (beforeinstallprompt) düğmeyi tazele
+  PWA.onChange(renderSettings);
 
   byId('autoBackupBtn').addEventListener('click', async () => {
     if (!AutoBackup.isSupported()) return;

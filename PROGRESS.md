@@ -10,7 +10,7 @@
 >   commit'lenir ve push'lanır. Commit mesajı formatı: `feat/fix/docs: kısa açıklama`
 > - Push yapılmadan görev tamamlanmış sayılmaz / raporlanmaz.
 
-Son güncelleme: 2026-08-07
+Son güncelleme: 2026-08-23
 
 ---
 
@@ -52,6 +52,8 @@ tarayıcıda çalışan panel.
 | 2026-07-22 | (bu commit) | **fix:** geçmişe dönük borçla eklenen kartta, kart eklenmeden önce son ödeme günü geçmiş ekstre için gecikme uyarısı çıkmıyor; sonraki dönem bekleniyor |
 | 2026-08-01 | `fe6d283` | **feat:** ortak limit havuzu — aynı bankanın birden fazla kartı tek limiti paylaşabiliyor (`limitGroups`, `schemaVersion: 2`, göç zinciri, havuz yönetim modalı, panelde havuz bloğu) |
 | 2026-08-07 | (bu commit) | **docs:** `main` `58a2680`'e ileri sarıldı ve push'landı — site (GitHub Pages) `main`'den yayınlandığı için 08-01 işleri canlıya yansımamıştı; deploy doğrulandı |
+| 2026-08-23 | (bu commit) | **feat:** PWA (manifest + service worker, çevrimdışı çalışma, "uygulamayı yükle"), marka logosu ve ikon seti, açılışta animasyonlu "Merhaba" karşılama ekranı |
+| 2026-08-23 | (bu commit) | **chore:** iç içe klasör düzeltildi — repo `creditfallow/Creditfollow/` içinden `creditfallow/` köküne taşındı |
 | 2026-08-01 | (bu commit) | **feat:** ürün türüne göre ayrı faiz motoru (`core/interest.js`) + 32 birim testi; vergi oranları ürün bazında düzenlenebilir, kredi amortisman tablosu ve erken kapama |
 
 ### Mevcut özellik seti
@@ -74,36 +76,47 @@ tarayıcıda çalışan panel.
 - **Otomatik yedek:** File System Access API ile seçilen dosyaya sürekli yazma, veri
   boşsa dosyadan geri yükleme
 - **Tema:** sistem tercihine göre koyu/açık, elle değiştirilebilir, flash önlemeli
+- **PWA:** ana ekrana/masaüstüne kurulabilir (manifest + maskable ikonlar), service worker
+  ile çevrimdışı çalışır, yeni sürüm çıkınca "Güncelle" bildirimi; Ayarlar'da kurulum kartı
+- **Açılış ekranı:** logo animasyonlu "Merhaba" karşılaması; oturumda bir kez tam,
+  sonraki yenilemelerde kısa; dokunma/tuş ile geçilebilir, hareket azaltma tercihine uyar
 
 ---
 
 ## 3. Dosya Yapısı ve Rolleri
 
 ```
-Creditfollow/
-├── index.html                       # Yalnızca markup — mantık içermez
+creditfallow/                        # repo kökü (2026-08-23: iç içe Creditfollow/ klasörü kaldırıldı)
+├── index.html                       # Yalnızca markup — mantık içermez (açılış ekranı markup'ı dâhil)
+├── manifest.webmanifest             # PWA manifesti: ad, ikonlar, tema rengi, kısayollar
+├── sw.js                            # Service worker: kabuk önbelleği, çevrimdışı, sürüm geçişi
 ├── package.json                     # dev + test script (node --test), tip: module
 ├── test/
 │   └── interest.test.js             # Faiz motoru birim testleri — `npm test`, harici bağımlılık yok
+├── tools/
+│   └── generate-icons.py            # Logo/ikon üretici (Pillow) — yalnızca geliştirici aracı
 ├── PROGRESS.md                      # ← bu dosya, proje hafızası
 ├── assets/
-│   ├── css/app.css                  # Tailwind ile ifade edilemeyen özel stiller
+│   ├── css/app.css                  # Tailwind ile ifade edilemeyen özel stiller + açılış ekranı
+│   ├── icons/                       # Marka: logo.svg, favicon*, icon-192/512, maskable-*, apple-touch, og-image
 │   └── js/
-│       ├── theme-boot.js            # Render öncesi tema uygulaması (flash önleme)
+│       ├── theme-boot.js            # Render öncesi tema + açılış ekranı kaydırma kilidi
 │       └── tailwind.config.js       # Tailwind CDN yapılandırması
 └── src/
-    ├── main.js                      # Giriş noktası: Store.load → bindEvents → render → tekrarlayanlar → otomatik yedek
+    ├── main.js                      # Giriş: splash → Store.load → bindEvents → render → tekrarlayanlar → yedek → PWA
     ├── config.js                    # Tüm sabitler: eşikler, renkler, banka listesi, kategoriler, ürün türleri, taksit seçenekleri
     ├── events.js                    # Tüm DOM olay bağlamaları ve klavye kısayolları
     ├── core/
     │   ├── store.js                 # Tek veri kaynağı: localStorage CRUD + normalize() ile şema göçü/onarımı
     │   ├── calc.js                  # Tüm iş hesapları: ekstre dönemi, asgari ödeme, taksit, özetler
-│   ├── interest.js              # Faiz motoru: kart / avans / kredi ayrı formüller + vergiler (saf, Store'suz)
+    │   ├── interest.js              # Faiz motoru: kart / avans / kredi ayrı formüller + vergiler (saf, Store'suz)
     │   ├── backup.js                # JSON dışa/içe aktarma, otomatik geri yükleme kararı
     │   ├── autobackup.js            # File System Access API sarmalayıcı (izin, debounce'lu yazma)
+    │   ├── pwa.js                   # Service worker kaydı, güncelleme bildirimi, kurulum istemi
     │   └── theme.js                 # Koyu/açık tema durumu
     ├── ui/
     │   ├── router.js                # Görünüm değiştirme (switchView) + renderAll
+    │   ├── splash.js                # Açılış ekranının süresi ve kapanışı
     │   ├── modal.js                 # Modal iskeleti + form yardımcıları (field/input/select/showErr)
     │   ├── bank-select.js           # Banka seçici (datalist + serbest metin)
     │   ├── charts.js                # Donut / çizgi / bar grafik çizimi
@@ -116,10 +129,10 @@ Creditfollow/
     │   │   ├── dashboard.js         # Panel: widget'lar, kart listesi, son işlemler
     │   │   ├── transactions.js      # İşlem listesi + filtreler (tarih aralığı, kategori, kart)
     │   │   ├── calendar.js          # Aylık takvim görünümü
-    │   │   └── settings.js          # Ayarlar: tema, eşik, bütçe, yedekleme
+    │   │   └── settings.js          # Ayarlar: tema, eşik, bütçe, yedekleme, uygulama kurulumu
     │   └── modals/
     │       ├── banks.js             # Banka yönetimi
-│       ├── limit-groups.js      # Ortak limit havuzu yönetimi + limit aşımı uyarısı
+    │       ├── limit-groups.js      # Ortak limit havuzu yönetimi + limit aşımı uyarısı
     │       ├── new-card.js / card-detail.js
     │       ├── new-overdraft.js / overdraft-detail.js
     │       ├── new-loan.js / loan-detail.js
@@ -131,8 +144,8 @@ Creditfollow/
         └── format.js                # TL/tarih biçimleme, güvenli tarih, parseAmount, kategori/banka ikonu
 ```
 
-Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` — otomatik yedek
-çıktısı, versiyonlanmaz.
+Repo kökündeki `kartpanel-otomatik-yedek.json` otomatik yedek çıktısıdır; `.claude/` ve
+`.tmp_cleanup_can_delete` ile birlikte `.gitignore`'dadır, versiyonlanmaz.
 
 ---
 
@@ -209,6 +222,35 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
     altında `ui/disclaimer.js` metni durur. Metin tek yerde tutulur ki tüm ekranlarda
     aynı dille çıksın.
 
+16. **PWA: manifest + service worker (2026-08-23).** Uygulama telefonda ana ekrana,
+    masaüstünde ayrı pencereye kurulabiliyor ve çevrimdışı açılıyor. Kararlar:
+    - Tüm yollar **göreli** (`./`): site GitHub Pages'te `/Creditfollow/` alt yolunda
+      yayınlandığı için mutlak yol kırılırdı. SW scope'u da `./`.
+    - Strateji ayrımı: HTML **network-first** (yeni sürüm hemen gelsin), aynı kaynak
+      varlıklar **stale-while-revalidate**, CDN (Tailwind / Font Awesome / Chart.js /
+      Google Fonts) **cache-first** — opaque yanıtlar dâhil, çevrimdışı da çalışsın diye.
+    - Yeni sürüm otomatik devreye **alınmaz**: kullanıcıya "Güncelle" aksiyonlu bildirim
+      gösterilir (`skip-waiting` mesajı), sayfa `controllerchange` ile bir kez yenilenir.
+      Gerekçe: kullanıcı form doldururken sayfanın altından kod değişmesin.
+    - `install` sırasında dosyalar tek tek eklenir; biri 404 verse kurulum tümden düşmesin.
+    - Sürüm yükseltmek için `sw.js` içindeki `VERSION` artırılır; eski `kartpanel-*`
+      önbellekleri `activate` sırasında silinir. **Yeni dosya eklendiğinde `SHELL`
+      listesine de eklenmelidir.**
+    - Kurulum istemi (`beforeinstallprompt`) tarayıcının kendi çubuğu yerine Ayarlar'daki
+      kartta sunulur; iOS bu olayı vermediği için oraya "Paylaş → Ana Ekrana Ekle" tarifi
+      yazılır.
+17. **Marka logosu koddan üretiliyor (2026-08-23).** `assets/icons/logo.svg` elle yazılmış
+    vektördür; PNG ikonlar `tools/generate-icons.py` (Pillow) ile aynı geometriden üretilir,
+    böylece SVG ve PNG tek kaynaktan tutarlı kalır, yeni boyut eklemek tek komuttur.
+    Maskable ikonlarda zemin **tam kare** ve marka %72 güvenli alandadır — köşeleri
+    işletim sistemi kırpar.
+18. **Açılış ekranı markup'ı index.html'de (2026-08-23).** JS ve Tailwind yüklenmeden
+    boyansın diye HTML'de hazır durur, stili `app.css` içindedir (Tailwind CDN'e bağımlı
+    değil); `src/ui/splash.js` yalnızca süreyi ve kapanışı yönetir. Kaydırma kilidi
+    (`html.splash-on`) `theme-boot.js` içinde açılır ve 8 sn'lik güvenlik ağıyla her
+    hâlükârda kalkar — modüller yüklenmese bile sayfa kilitli kalmasın. Aynı oturumdaki
+    sonraki yenilemelerde animasyon kısaltılır (`sessionStorage`).
+
 ---
 
 ## 5. Yapılacaklar (TODO)
@@ -228,6 +270,7 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
 - [x] ~~`refactor/proje-yapisi` dalı `main`'e merge edilmedi; main geride.~~
       2026-07-22'de `main` ileri sarıldı (fast-forward) ve push'landı; iki dal da `2e787ef`.
       2026-08-07'de tekrar ileri sarıldı; iki dal da `58a2680`.
+      2026-08-23'te PWA işiyle birlikte tekrar ileri sarıldı.
       Not: çalışma dalı hâlâ `refactor/proje-yapisi`; yeni işler burada yapılıp
       `main` periyodik olarak ileri sarılıyor.
       **DİKKAT — deploy kuralı:** Site GitHub Pages ile `main` dalından yayınlanıyor
@@ -235,8 +278,14 @@ Repo dışı (üst klasör `creditfallow/`): `kartpanel-otomatik-yedek.json` —
       GÜNCELLEMEZ; iş bittiğinde ayrıca
       `git push origin refactor/proje-yapisi:main` çalıştırılmalı.
       2026-08-01 işlerinin sitede görünmemesinin sebebi buydu.
-- [ ] Tailwind CDN kullanılıyor — çevrimdışı çalışmayı garanti etmiyor; yerel kopya
-      veya build adımı değerlendirilmeli.
+- [x] ~~Tailwind CDN kullanılıyor — çevrimdışı çalışmayı garanti etmiyor.~~
+      2026-08-23: service worker CDN yanıtlarını cache-first önbelleğe alıyor; ilk
+      açılıştan sonra çevrimdışı çalışıyor.
+- [ ] Tailwind ve Font Awesome yine de yerel kopyaya (veya build adımına) taşınabilir:
+      CDN sürümü değişirse önbellek eskir.
+- [ ] `sw.js` içindeki `SHELL` listesi elle tutuluyor; yeni modül eklenip listeye
+      yazılmazsa çevrimdışı açılışta o dosya eksik kalır. Dosya ağacından liste üreten
+      küçük bir script düşünülebilir.
 - [x] ~~İhtiyaç kredisi için ödeme planı (amortisman tablosu) detaylandırılabilir.~~
       2026-08-01: kredi detayında taksit bazlı amortisman tablosu (anapara/faiz/vergi/kalan)
       ve erken kapama tutarı eklendi.

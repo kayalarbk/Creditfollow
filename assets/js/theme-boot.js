@@ -9,4 +9,10 @@
     if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     if (theme === 'dark') document.documentElement.classList.add('dark');
   } catch (e) { /* bozuk veri: Store.load() ele alır */ }
+
+  // Açılış ekranı görünürken arka plan kaymasın (src/ui/splash.js kaldırır).
+  var root = document.documentElement;
+  root.classList.add('splash-on');
+  // Güvenlik ağı: modüller yüklenmezse sayfa kilitli kalmasın
+  setTimeout(function () { root.classList.remove('splash-on'); }, 8000);
 })();

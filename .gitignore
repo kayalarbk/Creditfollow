@@ -5,3 +5,9 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Proje klasörü artık repo kökü (eski iç içe Creditfollow/ kaldırıldı):
+# repo dışı tutulması gereken yerel dosyalar
+.claude/
+kartpanel-otomatik-yedek.json
+.tmp_cleanup_can_delete

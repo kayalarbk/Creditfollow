@@ -6,6 +6,25 @@
 <meta name="description" content="Kredi kartı borçlarınızı, limitlerinizi ve ödeme tarihlerinizi tek ekranda takip edin. Veriler yalnızca tarayıcınızda saklanır.">
 <title>KartPanel — Kredi Kartı ve Borç Yönetimi</title>
 
+<!-- PWA: yüklenebilirlik, tema rengi ve ana ekran ikonları -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0A84FF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0A0C" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="application-name" content="KartPanel">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KartPanel">
+<link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="KartPanel — Kredi Kartı ve Borç Yönetimi">
+<meta property="og:description" content="Kredi kartı, avans hesap ve kredi borçlarınızı tek ekranda takip edin. Veriler yalnızca cihazınızda saklanır.">
+<meta property="og:image" content="assets/icons/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+
 <!-- Tema, render'dan önce uygulanmalı (flash önleme) -->
 <script src="assets/js/theme-boot.js"></script>
 
@@ -23,13 +42,47 @@
 
 <body class="bg-app-light dark:bg-app-dark text-gray-900 dark:text-gray-100 font-sans min-h-screen transition-colors duration-300">
 
+<!-- ============ AÇILIŞ EKRANI ============
+     Markup burada durur ki Tailwind/JS yüklenmeden boyansın; kapatmayı src/ui/splash.js yapar. -->
+<div id="splash" role="status" aria-live="polite" aria-label="KartPanel açılıyor">
+  <div class="splash-inner">
+    <div class="splash-logo-wrap">
+      <svg class="splash-logo" viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <linearGradient id="splashLogoGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2A93FF"/><stop offset="1" stop-color="#6D6BEA"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="114.5" fill="url(#splashLogoGrad)"/>
+        <g transform="translate(256 197.1) rotate(-15)">
+          <rect x="-158.7" y="-102.4" width="317.4" height="204.8" rx="28.2" fill="#fff" opacity=".43"/>
+        </g>
+        <g transform="translate(256 294.4) rotate(-15)">
+          <rect x="-168.95" y="-110.1" width="337.9" height="220.2" rx="30.7" fill="#fff"/>
+          <rect x="-135.16" y="-66.06" width="114.9" height="30.8" rx="15.4" fill="#D6E2F5"/>
+          <g fill="#0A84FF">
+            <rect x="-128.4" y="17.7" width="35.5" height="48.4" rx="14.2"/>
+            <rect x="-74.3" y="-8.8" width="35.5" height="74.9" rx="14.2"/>
+            <rect x="-20.2" y="-35.2" width="35.5" height="101.3" rx="14.2"/>
+            <path d="M40.5 8.8 L121.6 -44" stroke="#0A84FF" stroke-width="15.2" stroke-linecap="round"/>
+            <path d="M121.6 -44 L64.2 -44 L121.6 13.4 Z"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <p class="splash-hello">Merhaba 👋</p>
+    <p class="splash-wordmark">KartPanel</p>
+    <p class="splash-tagline">Kartlarınız, avans hesabınız ve kredileriniz tek ekranda. Verileriniz yalnızca bu cihazda.</p>
+    <p class="splash-skip">Geçmek için dokunun</p>
+  </div>
+  <div class="splash-bar" aria-hidden="true"></div>
+</div>
+
 <!-- ============ ÜST BAR ============ -->
 <header class="sticky top-0 z-40 glass bg-white/75 dark:bg-[#111114]/80 border-b border-black/5 dark:border-white/10">
   <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
     <div class="flex items-center gap-2.5 min-w-0">
-      <div class="w-9 h-9 rounded-xl bg-accent text-white grid place-items-center shadow-card shrink-0">
-        <i class="fa-solid fa-credit-card text-sm"></i>
-      </div>
+      <img src="assets/icons/logo.svg" alt="KartPanel logosu" width="36" height="36" class="w-9 h-9 rounded-xl shadow-card shrink-0">
       <div class="min-w-0">
         <h1 class="font-bold leading-tight truncate">KartPanel</h1>
         <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-tight hidden sm:block">Kredi kartı &amp; borç yönetimi</p>
@@ -338,6 +391,17 @@
       </div>
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Aynı bankanın birden fazla kartı tek bir limiti paylaşıyorsa havuz tanımlayın; toplam limit bir kez sayılır, kullanılabilir limit havuzun tamamından hesaplanır. Kartların hesap kesim ve son ödeme tarihleri ayrı kalır.</p>
       <div id="limitGroupsList" class="space-y-2"></div>
+    </div>
+
+    <div id="installCard" class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">
+      <h2 class="font-bold mb-1">Uygulama olarak yükle</h2>
+      <p id="installDesc" class="text-sm text-gray-500 dark:text-gray-400 mb-4">KartPanel'i telefonunuzun ana ekranına veya bilgisayarınıza kurabilirsiniz: ayrı pencerede açılır, çevrimdışıyken de çalışır.</p>
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <button id="installBtn" class="h-11 px-5 rounded-xl bg-accent hover:bg-blue-600 text-white font-semibold text-sm transition-colors">
+          <i class="fa-solid fa-mobile-screen-button mr-2"></i>Uygulamayı yükle
+        </button>
+        <span id="installStatus" class="text-xs text-gray-400 dark:text-gray-500"></span>
+      </div>
     </div>
 
     <div class="rounded-xl2 bg-surface-light dark:bg-surface-dark shadow-card dark:shadow-cardDark p-5 sm:p-6 fade-in">

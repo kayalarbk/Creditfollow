@@ -1,6 +1,7 @@
 import { Store } from '../../core/store.js';
 import { Calc } from '../../core/calc.js';
 import { AutoBackup } from '../../core/autobackup.js';
+import { PWA } from '../../core/pwa.js';
 import { el, byId, clear } from '../../utils/dom.js';
 import { fmtTL, fmtDate, category, bankIcon } from '../../utils/format.js';
 import { recurringModal } from '../modals/recurring.js';
@@ -14,6 +15,7 @@ export function renderSettings() {
     ? 'Son yedek: ' + fmtDate.format(new Date(last))
     : 'Henüz yedek alınmadı.';
   renderAutoBackup();
+  renderInstall();
   renderBanks();
   renderLimitGroups();
   renderRecurring();
@@ -165,6 +167,41 @@ function iconBtn(icon, label, onClick) {
   b.appendChild(el('i', 'fa-solid ' + icon + ' text-xs'));
   b.addEventListener('click', onClick);
   return b;
+}
+
+/**
+ * "Uygulama olarak yükle" bölümü.
+ * Kurulum istemi yalnızca tarayıcı uygun gördüğünde gelir; gelmediğinde
+ * düğme yerine platforma göre elle kurulum yolu anlatılır.
+ */
+function renderInstall() {
+  const btn = byId('installBtn');
+  const status = byId('installStatus');
+  const desc = byId('installDesc');
+  if (!btn) return;
+
+  if (PWA.isStandalone) {
+    btn.classList.add('hidden');
+    desc.textContent = 'KartPanel şu anda uygulama olarak çalışıyor.';
+    status.textContent = 'Yüklü.';
+    return;
+  }
+
+  btn.classList.remove('hidden');
+  btn.disabled = !PWA.canInstall;
+  btn.classList.toggle('opacity-50', btn.disabled);
+  btn.classList.toggle('cursor-not-allowed', btn.disabled);
+  status.textContent = PWA.canInstall
+    ? 'Kurulum hazır.'
+    : (isIOS()
+        ? 'iPhone/iPad: Safari’de Paylaş → "Ana Ekrana Ekle".'
+        : 'Tarayıcı henüz kurulum izni vermedi; adres çubuğundaki yükle simgesini de kullanabilirsiniz.');
+}
+
+/** iOS Safari beforeinstallprompt desteklemez; kullanıcıya elle yol tarif edilir. */
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 function renderAutoBackup() {

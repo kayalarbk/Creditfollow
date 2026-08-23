@@ -5,12 +5,15 @@
 import { Store } from './core/store.js';
 import { AutoBackup } from './core/autobackup.js';
 import { applyAutoRestore } from './core/backup.js';
+import { PWA } from './core/pwa.js';
 import { bindEvents } from './events.js';
 import { switchView, renderAll } from './ui/router.js';
 import { renderSettings } from './ui/views/settings.js';
+import { initSplash } from './ui/splash.js';
 import { toast } from './ui/toast.js';
 
 function init() {
+  initSplash();
   Store.load();
   bindEvents();
   switchView('dashboard');
@@ -22,6 +25,7 @@ function init() {
 
   runRecurring();
   initAutoBackup();
+  PWA.init();
 }
 
 /** Vadesi gelmiş tekrarlayan işlemleri kaydeder ve kullanıcıyı bilgilendirir. */
