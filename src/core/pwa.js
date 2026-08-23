@@ -70,6 +70,14 @@ async function registerServiceWorker() {
     // Zaten bekleyen bir sürüm varsa (önceki oturumdan) kullanıcıya sor
     if (reg.waiting) offerUpdate(reg.waiting);
 
+    // Kabuk önbelleği yarım kalmış olabilir (ilk kurulum kötü ağda yapıldıysa):
+    // sayfa yerleştikten sonra SW'ye tamamlamasını söyle
+    navigator.serviceWorker.ready.then((ready) => {
+      setTimeout(() => {
+        if (navigator.onLine && ready.active) ready.active.postMessage('refresh-shell');
+      }, 4000);
+    });
+
     reg.addEventListener('updatefound', () => {
       const sw = reg.installing;
       if (!sw) return;

@@ -10,7 +10,7 @@
  * Kullanıcı verisi localStorage'dadır; SW hiçbir veriyi ağa göndermez.
  * Sürüm arttırıldığında eski önbellekler activate sırasında silinir.
  */
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.0.1';
 const SHELL_CACHE = `kartpanel-shell-${VERSION}`;
 const RUNTIME_CACHE = `kartpanel-runtime-${VERSION}`;
 
@@ -76,14 +76,26 @@ const CDN_HOSTS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(SHELL_CACHE);
-    // Tek bir dosya 404 verirse tüm kurulum düşmesin diye teker teker eklenir
-    await Promise.all(SHELL.map((url) =>
-      cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
-    ));
-  })());
+  event.waitUntil(fillShell());
 });
+
+/**
+ * Kabuk önbelleğindeki eksikleri tamamlar.
+ * Tek bir dosya 404 verirse kurulum tümden düşmesin diye teker teker eklenir.
+ * Kurulum ağın kötü olduğu (ya da yayının henüz yayılmadığı) bir anda yapıldıysa
+ * önbellek yarım kalır; bu yüzden activate'te ve sayfanın isteğiyle tekrar çalışır.
+ */
+async function fillShell() {
+  const cache = await caches.open(SHELL_CACHE);
+  const missing = [];
+  for (const url of SHELL) {
+    if (!(await cache.match(url))) missing.push(url);
+  }
+  await Promise.all(missing.map((url) =>
+    cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
+  ));
+  return missing.length;
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
@@ -93,12 +105,15 @@ self.addEventListener('activate', (event) => {
           .map((k) => caches.delete(k))
     );
     await self.clients.claim();
+    await fillShell();   // önceki kurulumdan eksik kalan varsa tamamla
   })());
 });
 
 // Sayfa "hemen güncelle" dediğinde bekleyen sürüm devreye girer
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting();
+  // Sayfa açılışta "kabuk tam mı?" diye sorar; eksikse çevrimiçiyken tamamlanır
+  if (event.data === 'refresh-shell') event.waitUntil(fillShell());
 });
 
 self.addEventListener('fetch', (event) => {
